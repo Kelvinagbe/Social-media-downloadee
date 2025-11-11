@@ -57,7 +57,7 @@ export default function TikTokDownloader() {
     }
 
     if (!trimmed.includes('tiktok.com')) {
-      setError('Please enter a valid TikTok URL');
+      setError('Please enter a valid TikTok URL (e.g., https://www.tiktok.com/... or https://vm.tiktok.com/...)');
       return;
     }
 
@@ -83,14 +83,14 @@ export default function TikTokDownloader() {
       setIsLoading(false);
 
       // Handle error responses
-      if (!res.ok || data.success === false) {
-        setError(data.message || data.error || 'Failed to fetch video. Please try again.');
+      if (data.success === false) {
+        setError(data.message || 'Failed to fetch video. Please try again.');
         return;
       }
 
       // Check if we have valid result data
       if (!data.result || data.result === null) {
-        setError('No video data found. The video might be private, deleted, or unavailable.');
+        setError('No video data found. The video might be private, deleted, region-restricted, or the URL might be invalid. Try copying the URL again from TikTok.');
         return;
       }
 
@@ -104,7 +104,7 @@ export default function TikTokDownloader() {
       if (err.message.includes('Failed to fetch')) {
         setError('Network error. Please check your internet connection and try again.');
       } else {
-        setError('An unexpected error occurred. Please try again.');
+        setError('An unexpected error occurred. Please try again or try a different video URL.');
       }
     }
   };
@@ -139,7 +139,7 @@ export default function TikTokDownloader() {
                 value={url} 
                 onChange={(e) => setUrl(e.target.value)} 
                 onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
-                placeholder="https://www.tiktok.com/@username/video/1234567890"
+                placeholder="https://www.tiktok.com/@username/video/... or https://vm.tiktok.com/..."
                 disabled={isLoading}
                 className="w-full px-5 py-4 bg-white border-2 border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
