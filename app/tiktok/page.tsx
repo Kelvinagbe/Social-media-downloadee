@@ -3,14 +3,49 @@
 import React, { useState } from 'react';
 import { Download, Sparkles, Loader2, Check, AlertCircle, Zap, Shield } from 'lucide-react';
 
-export default function TikTokPage() {
+interface VideoInfo {
+  thumbnail?: string;
+  cover?: string;
+  title?: string;
+  description?: string;
+  author?: string;
+  username?: string;
+  duration?: number;
+  likes?: number;
+  views?: number;
+  shares?: number;
+  video?: string;
+  videoUrl?: string;
+  download?: string;
+  videoHD?: string;
+  hdVideo?: string;
+  videoWatermark?: boolean;
+  videoNoWatermark?: string;
+  audio?: string;
+  music?: string;
+  audioUrl?: string;
+  images?: string[];
+}
+
+interface ApiResponse {
+  success: boolean;
+  status: number;
+  message?: string;
+  result?: VideoInfo | null;
+  error?: string;
+}
+
+export default function TikTokDownloader() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [videoInfo, setVideoInfo] = useState<any>(null);
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [error, setError] = useState('');
 
-  const formatNum = (n: number) => 
-    n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : n.toString();
+  const formatNum = (n: number): string => {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toString();
+  };
 
   const handleDownload = async () => {
     const trimmed = url.trim();
@@ -31,58 +66,43 @@ export default function TikTokPage() {
     setVideoInfo(null);
 
     try {
-      const apiUrl = `https://api.giftedtech.co.ke/api/download/tiktok?apikey=gifted&url=${encodeURIComponent(trimmed)}`;
-      console.log('Fetching from:', apiUrl);
+      // Call our Next.js API route
+      const apiUrl = `/api/tiktok?url=${encodeURIComponent(trimmed)}`;
       
       const res = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-        }
+        },
       });
 
-      console.log('Response status:', res.status);
+      const data: ApiResponse = await res.json();
       
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
       console.log('API Response:', data);
       
       setIsLoading(false);
 
-      // Check various error conditions
-      if (data.success === false) {
-        setError(data.message || 'Failed to fetch video. The video might be private or unavailable.');
+      // Handle error responses
+      if (!res.ok || data.success === false) {
+        setError(data.message || data.error || 'Failed to fetch video. Please try again.');
         return;
       }
 
-      if (data.status !== 200) {
-        setError(data.message || 'API returned an error. Please try again.');
-        return;
-      }
-
+      // Check if we have valid result data
       if (!data.result || data.result === null) {
-        setError('No video data found. The video might be private, deleted, or the URL is incorrect.');
+        setError('No video data found. The video might be private, deleted, or unavailable.');
         return;
       }
 
-      // Success - we have video info
-      if (data.success === true && data.result) {
-        setVideoInfo(data.result);
-      } else {
-        setError('Unexpected response format from the API.');
-      }
-
+      // Success - display video info
+      setVideoInfo(data.result);
+      
     } catch (err: any) {
       setIsLoading(false);
       console.error('Fetch error:', err);
       
       if (err.message.includes('Failed to fetch')) {
         setError('Network error. Please check your internet connection and try again.');
-      } else if (err.message.includes('HTTP error')) {
-        setError('Server error. The API might be temporarily unavailable.');
       } else {
         setError('An unexpected error occurred. Please try again.');
       }
@@ -90,204 +110,256 @@ export default function TikTokPage() {
   };
 
   return (
-    <main className="flex-1 px-6 py-8 lg:px-12 lg:py-12">
+    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 px-6 py-12">
       <div className="max-w-4xl mx-auto">
 
-        {/* Hero */}
-        <div className="mb-12">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 rounded-full mb-4">
-            <Sparkles className="w-3 h-3 text-black" />
-            <span className="text-xs font-medium text-black">Fast & Reliable</span>
+        {/* Hero Section */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-black rounded-full mb-6 shadow-sm">
+            <Sparkles className="w-4 h-4 text-black" />
+            <span className="text-sm font-semibold text-black">Fast & Reliable</span>
           </div>
-          <h1 className="text-4xl lg:text-5xl font-bold mb-4 tracking-tight text-black">
-            Download from TikTok
+          <h1 className="text-5xl lg:text-6xl font-bold mb-4 tracking-tight text-black">
+            TikTok Downloader
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Save videos, audio, and images from TikTok. Fast, free, and easy to use.
           </p>
         </div>
 
-        {/* Download Card */}
-        <div className="bg-white border-2 border-black rounded-xl p-8 mb-8 shadow-sm">
-          <div className="space-y-5">
+        {/* Main Download Card */}
+        <div className="bg-white border-2 border-black rounded-2xl p-8 mb-8 shadow-lg">
+          <div className="space-y-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Enter TikTok URL</label>
+              <label className="block text-sm font-semibold mb-3 text-black">
+                Enter TikTok Video URL
+              </label>
               <input 
                 type="text" 
                 value={url} 
                 onChange={(e) => setUrl(e.target.value)} 
-                onKeyPress={(e) => e.key === 'Enter' && handleDownload()}
+                onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
                 placeholder="https://www.tiktok.com/@username/video/1234567890"
-                className="w-full px-4 py-3 bg-white border-2 border-black rounded-lg placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-black/10 text-sm"
+                disabled={isLoading}
+                className="w-full px-5 py-4 bg-white border-2 border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <p className="text-xs text-gray-500 mt-2">
-                Paste a TikTok video URL (e.g., https://www.tiktok.com/@user/video/...)
+              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                💡 Paste any TikTok video URL and press Enter or click the button below
               </p>
             </div>
 
             <button 
               onClick={handleDownload} 
-              disabled={isLoading}
-              className="w-full bg-black text-white font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm shadow-lg"
+              disabled={isLoading || !url.trim()}
+              className="w-full bg-black text-white font-semibold py-4 px-6 rounded-xl hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-3 text-base shadow-lg"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Processing...</span>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Processing Video...</span>
                 </>
               ) : (
                 <>
-                  <Download className="w-4 h-4" />
-                  <span>Download Video</span>
+                  <Download className="w-5 h-5" />
+                  <span>Get Download Links</span>
                 </>
               )}
             </button>
           </div>
 
-          {/* Error */}
+          {/* Error Display */}
           {error && (
-            <div className="mt-6 p-4 bg-red-50 border-2 border-red-200 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-semibold text-red-900 mb-1">Error</h4>
-                <p className="text-sm text-red-700">{error}</p>
-                <p className="text-xs text-red-600 mt-2">
-                  Tips: Make sure the video is public and the URL is correct.
+            <div className="mt-6 p-5 bg-red-50 border-2 border-red-200 rounded-xl flex items-start gap-3 animate-in fade-in duration-300">
+              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="text-sm font-bold text-red-900 mb-1">Error</h4>
+                <p className="text-sm text-red-700 mb-2">{error}</p>
+                <p className="text-xs text-red-600">
+                  💡 <strong>Tips:</strong> Make sure the video is public, not age-restricted, and the URL is correct.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Video Info */}
+          {/* Video Info Display */}
           {videoInfo && (
-            <div className="mt-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Check className="w-5 h-5 text-green-600" />
-                <h3 className="text-lg font-semibold">Video Found!</h3>
+            <div className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-2 mb-5 pb-4 border-b-2 border-gray-100">
+                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                  <Check className="w-5 h-5 text-white" />
+                </div>
+                <h3 className="text-xl font-bold text-black">Video Found!</h3>
               </div>
 
+              {/* Thumbnail */}
               {(videoInfo.thumbnail || videoInfo.cover) && (
-                <img 
-                  src={videoInfo.thumbnail || videoInfo.cover} 
-                  alt="Video Thumbnail" 
-                  className="w-full rounded-lg mb-4 border-2 border-gray-200" 
-                />
+                <div className="mb-6">
+                  <img 
+                    src={videoInfo.thumbnail || videoInfo.cover} 
+                    alt="Video Thumbnail" 
+                    className="w-full max-w-md mx-auto rounded-xl border-2 border-gray-200 shadow-md" 
+                  />
+                </div>
               )}
 
-              <div className="bg-gray-50 rounded-lg p-4 mb-4 space-y-2 text-sm">
+              {/* Video Details */}
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-5 mb-6 space-y-3 text-sm border border-gray-200">
                 {(videoInfo.title || videoInfo.description) && (
-                  <p><strong>Description:</strong> {videoInfo.title || videoInfo.description}</p>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 min-w-[90px]">Description:</span>
+                    <span className="text-gray-900">{videoInfo.title || videoInfo.description}</span>
+                  </div>
                 )}
                 {(videoInfo.author || videoInfo.username) && (
-                  <p><strong>Author:</strong> @{videoInfo.author || videoInfo.username}</p>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 min-w-[90px]">Author:</span>
+                    <span className="text-gray-900">@{videoInfo.author || videoInfo.username}</span>
+                  </div>
                 )}
-                {videoInfo.duration && <p><strong>Duration:</strong> {videoInfo.duration}s</p>}
-                {videoInfo.likes && <p><strong>Likes:</strong> {formatNum(videoInfo.likes)}</p>}
-                {videoInfo.views && <p><strong>Views:</strong> {formatNum(videoInfo.views)}</p>}
-                {videoInfo.shares && <p><strong>Shares:</strong> {formatNum(videoInfo.shares)}</p>}
+                {videoInfo.duration && (
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 min-w-[90px]">Duration:</span>
+                    <span className="text-gray-900">{videoInfo.duration} seconds</span>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-4 pt-3 border-t border-gray-300">
+                  {videoInfo.likes && (
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-black">❤️ {formatNum(videoInfo.likes)}</div>
+                      <div className="text-xs text-gray-600">Likes</div>
+                    </div>
+                  )}
+                  {videoInfo.views && (
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-black">👁️ {formatNum(videoInfo.views)}</div>
+                      <div className="text-xs text-gray-600">Views</div>
+                    </div>
+                  )}
+                  {videoInfo.shares && (
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-black">🔄 {formatNum(videoInfo.shares)}</div>
+                      <div className="text-xs text-gray-600">Shares</div>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
+              {/* Download Links */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-black mb-3">Download Options:</h4>
+                
                 {(videoInfo.video || videoInfo.videoUrl || videoInfo.download) && (
                   <a 
                     href={videoInfo.video || videoInfo.videoUrl || videoInfo.download} 
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
+                    className="block w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-purple-700 hover:to-blue-700 active:scale-95 transition-all shadow-md"
                   >
                     📥 Download Video (With Watermark)
                   </a>
                 )}
+                
                 {(videoInfo.videoHD || videoInfo.hdVideo) && (
                   <a 
                     href={videoInfo.videoHD || videoInfo.hdVideo} 
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
+                    className="block w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-cyan-700 active:scale-95 transition-all shadow-md"
                   >
-                    📥 Download HD Video
+                    ✨ Download HD Video
                   </a>
                 )}
+                
                 {videoInfo.videoWatermark === false && videoInfo.videoNoWatermark && (
                   <a 
                     href={videoInfo.videoNoWatermark} 
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
+                    className="block w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-green-700 hover:to-emerald-700 active:scale-95 transition-all shadow-md"
                   >
-                    📥 Download Video (No Watermark)
+                    🎬 Download Video (No Watermark)
                   </a>
                 )}
+                
                 {(videoInfo.audio || videoInfo.music || videoInfo.audioUrl) && (
                   <a 
                     href={videoInfo.audio || videoInfo.music || videoInfo.audioUrl} 
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-gray-900 text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
+                    className="block w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-pink-700 hover:to-rose-700 active:scale-95 transition-all shadow-md"
                   >
                     🎵 Download Audio Only
                   </a>
                 )}
+                
                 {videoInfo.images && Array.isArray(videoInfo.images) && videoInfo.images.length > 0 && (
-                  videoInfo.images.map((img: string, i: number) => (
-                    <a 
-                      key={i}
-                      href={img} 
-                      download 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
-                    >
-                      🖼️ Download Image {i + 1}
-                    </a>
-                  ))
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm font-semibold text-gray-700">Photo Slideshow Images:</p>
+                    {videoInfo.images.map((img: string, i: number) => (
+                      <a 
+                        key={i}
+                        href={img} 
+                        download 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white text-center font-semibold py-3 px-6 rounded-xl hover:from-amber-700 hover:to-orange-700 active:scale-95 transition-all shadow-md"
+                      >
+                        🖼️ Download Image {i + 1}
+                      </a>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        {/* Features */}
+        {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {[
-            { icon: Zap, title: 'Lightning Fast', desc: 'Download in seconds with optimized servers.' },
-            { icon: Shield, title: 'Safe & Secure', desc: "Your privacy is protected. We don't store data." },
-            { icon: Sparkles, title: 'HD Quality', desc: 'Get the best available quality.' }
-          ].map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="border-2 border-black bg-gray-50 rounded-lg p-6">
-              <div className="w-10 h-10 bg-black rounded-lg flex items-center justify-center mb-4">
-                <Icon className="w-5 h-5 text-white" />
+            { icon: Zap, title: 'Lightning Fast', desc: 'Download videos in seconds with our optimized servers.', color: 'bg-yellow-500' },
+            { icon: Shield, title: 'Safe & Secure', desc: "Your privacy matters. We don't store any data.", color: 'bg-blue-500' },
+            { icon: Sparkles, title: 'HD Quality', desc: 'Get the best available quality, including HD options.', color: 'bg-purple-500' }
+          ].map(({ icon: Icon, title, desc, color }) => (
+            <div key={title} className="border-2 border-black bg-white rounded-xl p-6 hover:shadow-xl transition-shadow">
+              <div className={`w-12 h-12 ${color} rounded-xl flex items-center justify-center mb-4 shadow-md`}>
+                <Icon className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-sm font-semibold text-black mb-2">{title}</h3>
-              <p className="text-sm text-gray-600">{desc}</p>
+              <h3 className="text-base font-bold text-black mb-2">{title}</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
 
         {/* How it Works */}
-        <div className="border-2 border-black rounded-lg p-8">
-          <h2 className="text-xl font-semibold mb-6">How it works</h2>
-          <div className="space-y-4">
+        <div className="border-2 border-black bg-white rounded-xl p-8 shadow-lg">
+          <h2 className="text-2xl font-bold mb-6 text-black">How it works</h2>
+          <div className="space-y-5">
             {[
-              { title: 'Copy the URL', desc: 'Open TikTok, find the video, and copy its URL from your browser or share menu.' },
-              { title: 'Paste URL here', desc: 'Paste the URL in the input field above and click Download.' },
-              { title: 'Save to device', desc: 'Choose your preferred quality and download instantly to your device.' }
+              { title: 'Copy the URL', desc: 'Open TikTok, find the video you want, and copy its URL from your browser or the share menu.' },
+              { title: 'Paste URL here', desc: 'Paste the URL in the input field above and click "Get Download Links" or press Enter.' },
+              { title: 'Save to device', desc: 'Choose your preferred quality and format, then download instantly to your device.' }
             ].map(({ title, desc }, i) => (
               <div key={i} className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-medium">
+                <div className="flex-shrink-0 w-10 h-10 bg-black text-white rounded-full flex items-center justify-center text-base font-bold shadow-md">
                   {i + 1}
                 </div>
-                <div>
-                  <h4 className="text-sm font-medium mb-1">{title}</h4>
-                  <p className="text-sm text-gray-600">{desc}</p>
+                <div className="flex-1 pt-1">
+                  <h4 className="text-base font-semibold mb-1 text-black">{title}</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-12 text-sm text-gray-500">
+          <p>Powered by Gifted Tech API 🇰🇪</p>
         </div>
 
       </div>
