@@ -1,3 +1,5 @@
+'use client' 
+
 import React, { useState } from 'react';
 import { Download, Video, Music, Image, Menu, X, Facebook, Youtube, Twitter, Instagram, Sparkles, Zap, Shield, Loader2, Check, AlertCircle } from 'lucide-react';
 
