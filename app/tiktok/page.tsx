@@ -14,34 +14,85 @@ export default function TikTokPage() {
 
   const handleDownload = async () => {
     const trimmed = url.trim();
-    if (!trimmed) return setError('Please enter a valid URL');
+    
+    // Validation
+    if (!trimmed) {
+      setError('Please enter a TikTok URL');
+      return;
+    }
+
+    if (!trimmed.includes('tiktok.com')) {
+      setError('Please enter a valid TikTok URL');
+      return;
+    }
 
     setIsLoading(true);
     setError('');
     setVideoInfo(null);
 
     try {
-      const res = await fetch(`https://api.giftedtech.co.ke/api/download/tiktok?apikey=gifted&url=${encodeURIComponent(trimmed)}`);
+      const apiUrl = `https://api.giftedtech.co.ke/api/download/tiktok?apikey=gifted&url=${encodeURIComponent(trimmed)}`;
+      console.log('Fetching from:', apiUrl);
+      
+      const res = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      console.log('Response status:', res.status);
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
       const data = await res.json();
+      console.log('API Response:', data);
+      
       setIsLoading(false);
 
-      if (!data.success || data.status !== 200) {
-        setError(data.message || 'Failed to fetch video');
-      } else if (data.result) {
+      // Check various error conditions
+      if (data.success === false) {
+        setError(data.message || 'Failed to fetch video. The video might be private or unavailable.');
+        return;
+      }
+
+      if (data.status !== 200) {
+        setError(data.message || 'API returned an error. Please try again.');
+        return;
+      }
+
+      if (!data.result || data.result === null) {
+        setError('No video data found. The video might be private, deleted, or the URL is incorrect.');
+        return;
+      }
+
+      // Success - we have video info
+      if (data.success === true && data.result) {
         setVideoInfo(data.result);
       } else {
-        setError('No video found. May be private or unavailable.');
+        setError('Unexpected response format from the API.');
       }
-    } catch {
+
+    } catch (err: any) {
       setIsLoading(false);
-      setError('Network error. Check connection and retry.');
+      console.error('Fetch error:', err);
+      
+      if (err.message.includes('Failed to fetch')) {
+        setError('Network error. Please check your internet connection and try again.');
+      } else if (err.message.includes('HTTP error')) {
+        setError('Server error. The API might be temporarily unavailable.');
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
     }
   };
 
   return (
     <main className="flex-1 px-6 py-8 lg:px-12 lg:py-12">
       <div className="max-w-4xl mx-auto">
-        
+
         {/* Hero */}
         <div className="mb-12">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-50 rounded-full mb-4">
@@ -60,21 +111,24 @@ export default function TikTokPage() {
         <div className="bg-white border-2 border-black rounded-xl p-8 mb-8 shadow-sm">
           <div className="space-y-5">
             <div>
-              <label className="block text-sm font-medium mb-2">Enter URL</label>
+              <label className="block text-sm font-medium mb-2">Enter TikTok URL</label>
               <input 
                 type="text" 
                 value={url} 
                 onChange={(e) => setUrl(e.target.value)} 
                 onKeyPress={(e) => e.key === 'Enter' && handleDownload()}
-                placeholder="https://www.tiktok.com/..."
-                className="w-full px-4 py-3 bg-white border-2 border-black rounded-lg placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-opacity-20 text-sm"
+                placeholder="https://www.tiktok.com/@username/video/1234567890"
+                className="w-full px-4 py-3 bg-white border-2 border-black rounded-lg placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-black/10 text-sm"
               />
+              <p className="text-xs text-gray-500 mt-2">
+                Paste a TikTok video URL (e.g., https://www.tiktok.com/@user/video/...)
+              </p>
             </div>
 
             <button 
               onClick={handleDownload} 
               disabled={isLoading}
-              className="w-full bg-black text-white font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm shadow-lg"
+              className="w-full bg-black text-white font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm shadow-lg"
             >
               {isLoading ? (
                 <>
@@ -97,6 +151,9 @@ export default function TikTokPage() {
               <div>
                 <h4 className="text-sm font-semibold text-red-900 mb-1">Error</h4>
                 <p className="text-sm text-red-700">{error}</p>
+                <p className="text-xs text-red-600 mt-2">
+                  Tips: Make sure the video is public and the URL is correct.
+                </p>
               </div>
             </div>
           )}
@@ -112,7 +169,7 @@ export default function TikTokPage() {
               {(videoInfo.thumbnail || videoInfo.cover) && (
                 <img 
                   src={videoInfo.thumbnail || videoInfo.cover} 
-                  alt="Thumbnail" 
+                  alt="Video Thumbnail" 
                   className="w-full rounded-lg mb-4 border-2 border-gray-200" 
                 />
               )}
@@ -137,7 +194,7 @@ export default function TikTokPage() {
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800"
+                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
                   >
                     📥 Download Video (With Watermark)
                   </a>
@@ -148,7 +205,7 @@ export default function TikTokPage() {
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800"
+                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
                   >
                     📥 Download HD Video
                   </a>
@@ -159,7 +216,7 @@ export default function TikTokPage() {
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800"
+                    className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
                   >
                     📥 Download Video (No Watermark)
                   </a>
@@ -170,10 +227,24 @@ export default function TikTokPage() {
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-gray-900 text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800"
+                    className="block w-full bg-gray-900 text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
                   >
                     🎵 Download Audio Only
                   </a>
+                )}
+                {videoInfo.images && Array.isArray(videoInfo.images) && videoInfo.images.length > 0 && (
+                  videoInfo.images.map((img: string, i: number) => (
+                    <a 
+                      key={i}
+                      href={img} 
+                      download 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block w-full bg-black text-white text-center font-medium py-3 px-6 rounded-lg hover:bg-gray-800 transition-colors"
+                    >
+                      🖼️ Download Image {i + 1}
+                    </a>
+                  ))
                 )}
               </div>
             </div>
@@ -202,9 +273,9 @@ export default function TikTokPage() {
           <h2 className="text-xl font-semibold mb-6">How it works</h2>
           <div className="space-y-4">
             {[
-              { title: 'Copy the URL', desc: 'Find content and copy its URL from your browser.' },
-              { title: 'Paste and select format', desc: 'Paste URL and choose your format.' },
-              { title: 'Download instantly', desc: 'Click download and save to your device.' }
+              { title: 'Copy the URL', desc: 'Open TikTok, find the video, and copy its URL from your browser or share menu.' },
+              { title: 'Paste URL here', desc: 'Paste the URL in the input field above and click Download.' },
+              { title: 'Save to device', desc: 'Choose your preferred quality and download instantly to your device.' }
             ].map(({ title, desc }, i) => (
               <div key={i} className="flex gap-4">
                 <div className="flex-shrink-0 w-8 h-8 bg-black text-white rounded-full flex items-center justify-center text-sm font-medium">
