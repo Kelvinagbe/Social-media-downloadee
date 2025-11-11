@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation';
 import { Download, Facebook, Music, Youtube, Twitter, Instagram, Video, Image as ImageIcon, X } from 'lucide-react';
 
 const platforms = [
-  { id: 'all', name: 'All Platforms', icon: Download, href: '/' },
-  { id: 'facebook', name: 'Facebook', icon: Facebook, href: '/facebook' },
-  { id: 'tiktok', name: 'TikTok', icon: Music, href: '/tiktok' },
-  { id: 'youtube', name: 'YouTube', icon: Youtube, href: '/youtube' },
-  { id: 'twitter', name: 'X (Twitter)', icon: Twitter, href: '/twitter' },
-  { id: 'instagram', name: 'Instagram', icon: Instagram, href: '/instagram' },
+  { id: 'all', name: 'All Platforms', icon: Download, href: '/', color: 'bg-gray-900' },
+  { id: 'facebook', name: 'Facebook', icon: Facebook, href: '/facebook', color: 'bg-blue-600' },
+  { id: 'tiktok', name: 'TikTok', icon: Music, href: '/tiktok', color: 'bg-black' },
+  { id: 'youtube', name: 'YouTube', icon: Youtube, href: '/youtube', color: 'bg-red-600' },
+  { id: 'twitter', name: 'X (Twitter)', icon: Twitter, href: '/twitter', color: 'bg-black' },
+  { id: 'instagram', name: 'Instagram', icon: Instagram, href: '/instagram', color: 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500' },
 ];
 
 export default function Sidebar() {
@@ -20,10 +20,8 @@ export default function Sidebar() {
   const closeSidebar = () => {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('overlay');
-    if (sidebar && overlay) {
-      sidebar.classList.add('-translate-x-full');
-      overlay.classList.add('hidden');
-    }
+    sidebar?.classList.add('-translate-x-full');
+    overlay?.classList.add('hidden');
   };
 
   return (
@@ -52,7 +50,7 @@ export default function Sidebar() {
                   onClick={closeSidebar}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     active 
-                      ? 'bg-gray-900 text-white shadow-lg' 
+                      ? `${p.color} text-white shadow-lg` 
                       : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
@@ -87,15 +85,6 @@ export default function Sidebar() {
         className="hidden fixed inset-0 bg-black/20 z-30 lg:hidden" 
         onClick={closeSidebar}
       />
-
-      <script dangerouslySetInnerHTML={{__html: `
-        document.getElementById('sidebar-toggle')?.addEventListener('click', () => {
-          const sidebar = document.getElementById('sidebar');
-          const overlay = document.getElementById('overlay');
-          sidebar?.classList.toggle('-translate-x-full');
-          overlay?.classList.toggle('hidden');
-        });
-      `}} />
     </>
   );
 }
