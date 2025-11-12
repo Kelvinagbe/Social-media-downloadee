@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Your universal downloader API base URL
 const UNIVERSAL_API_BASE = 'https://downloader.ovrica.name.ng';
 
-// Function to resolve shortened TikTok URLs
 async function resolveShortUrl(url: string): Promise<string> {
   try {
     if (url.includes('/video/') || url.includes('tiktok.com/@')) {
@@ -16,15 +14,13 @@ async function resolveShortUrl(url: string): Promise<string> {
         method: 'GET',
         redirect: 'follow',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         },
       });
-
       const finalUrl = response.url || url;
       console.log('Resolved to:', finalUrl);
       return finalUrl;
     }
-
     return url;
   } catch (error) {
     console.error('Error resolving short URL:', error);
@@ -32,22 +28,18 @@ async function resolveShortUrl(url: string): Promise<string> {
   }
 }
 
-// Extract video ID from TikTok URL
 function extractVideoId(url: string): string | null {
   try {
     const videoMatch = url.match(/\/video\/(\d+)/);
     if (videoMatch) return videoMatch[1];
-
     const vMatch = url.match(/\/v\/(\d+)/);
     if (vMatch) return vMatch[1];
-
     return null;
   } catch (error) {
     return null;
   }
 }
 
-// Fetch from Universal Downloader API
 async function fetchFromUniversalAPI(url: string): Promise<any> {
   try {
     const apiUrl = `${UNIVERSAL_API_BASE}/api/tiktok/download?url=${encodeURIComponent(url)}`;
@@ -57,59 +49,47 @@ async function fetchFromUniversalAPI(url: string): Promise<any> {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
-      signal: AbortSignal.timeout(30000), // 30 seconds timeout
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!response.ok) {
       console.log(`API returned status ${response.status}`);
       return {
         success: false,
-        error: {
-          message: `API returned status ${response.status}`,
-          status: response.status
-        }
+        error: { message: `API returned status ${response.status}`, status: response.status }
       };
     }
 
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      console.log('API returned invalid content type');
       return {
         success: false,
-        error: {
-          message: 'Invalid content type returned',
-          contentType
-        }
+        error: { message: 'Invalid content type returned', contentType }
       };
     }
 
     const data = await response.json();
+    console.log('API Response:', JSON.stringify(data, null, 2));
 
-    // Check if we got a valid result
+    // Check if we got valid data
     if (data.success && data.data) {
       console.log('Successfully fetched video data');
-      return { success: true, data };
+      return { success: true, data: data.data }; // Extract the nested data
     }
 
     console.log('API returned unsuccessful response:', data);
     return {
       success: false,
-      error: {
-        message: data.message || 'Failed to fetch video data',
-        details: data
-      }
+      error: { message: data.message || 'Failed to fetch video data', details: data }
     };
 
   } catch (error: any) {
     console.error('Universal API Error:', error);
     return {
       success: false,
-      error: {
-        message: error.message,
-        type: error.name
-      }
+      error: { message: error.message, type: error.name }
     };
   }
 }
@@ -121,22 +101,14 @@ export async function GET(request: NextRequest) {
 
     if (!rawUrl) {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 400,
-          message: 'URL parameter is required' 
-        },
+        { success: false, status: 400, message: 'URL parameter is required' },
         { status: 400 }
       );
     }
 
     if (!rawUrl.includes('tiktok.com')) {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 400,
-          message: 'Please provide a valid TikTok URL' 
-        },
+        { success: false, status: 400, message: 'Please provide a valid TikTok URL' },
         { status: 400 }
       );
     }
@@ -156,7 +128,7 @@ export async function GET(request: NextRequest) {
         { 
           success: false,
           status: 404,
-          message: 'Could not fetch video data. This could mean:\n• The video is private or deleted\n• The video is region-restricted\n• The API cannot access this video\n\nTry:\n1. Make sure the video is public\n2. Copy the URL directly from TikTok app\n3. Try a different video to test if the service is working',
+          message: 'Could not fetch video data. The video might be private, deleted, or region-restricted.',
           debug: {
             originalUrl: rawUrl,
             resolvedUrl: resolvedUrl,
@@ -169,8 +141,11 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('Step 5: Success! Returning video data');
+    
+    // Return the data directly, not nested
     return NextResponse.json({
-      ...result.data,
+      success: true,
+      data: result.data, // This will be picked up by frontend as data.data
       _meta: {
         api_used: 'Universal Downloader',
         endpoint: `${UNIVERSAL_API_BASE}/api/tiktok/download`
@@ -183,26 +158,17 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('TikTok API Error:', error);
-    console.error('Error stack:', error.stack);
 
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 408,
-          message: 'Request timeout. Please try again in a few moments.' 
-        },
+        { success: false, status: 408, message: 'Request timeout. Please try again.' },
         { status: 200 }
       );
     }
 
     if (error.message.includes('fetch failed') || error.code === 'ECONNREFUSED') {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 503,
-          message: 'Cannot connect to the video service. Please try again later.' 
-        },
+        { success: false, status: 503, message: 'Cannot connect to the video service.' },
         { status: 200 }
       );
     }
@@ -227,24 +193,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const rawUrl = body.url;
 
-    if (!rawUrl) {
+    if (!rawUrl || !rawUrl.includes('tiktok.com')) {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 400,
-          message: 'URL is required in request body' 
-        },
-        { status: 400 }
-      );
-    }
-
-    if (!rawUrl.includes('tiktok.com')) {
-      return NextResponse.json(
-        { 
-          success: false,
-          status: 400,
-          message: 'Please provide a valid TikTok URL' 
-        },
+        { success: false, status: 400, message: 'Valid TikTok URL is required' },
         { status: 400 }
       );
     }
@@ -254,17 +205,15 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { 
-          success: false,
-          status: 404,
-          message: 'Failed to fetch video data',
-          debug: result.error
-        },
+        { success: false, status: 404, message: 'Failed to fetch video data', debug: result.error },
         { status: 200 }
       );
     }
 
-    return NextResponse.json(result.data, {
+    return NextResponse.json({
+      success: true,
+      data: result.data
+    }, {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
       },
@@ -272,7 +221,6 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('TikTok API Error:', error);
-
     return NextResponse.json(
       { 
         success: false,
