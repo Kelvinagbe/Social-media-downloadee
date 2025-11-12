@@ -1,7 +1,6 @@
 // app/api/facebook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-// Your universalDownloader API base URL - MUST include https://
 const API_BASE = 'https://downloader.ovrica.name.ng';
 
 export async function GET(request: NextRequest) {
@@ -16,7 +15,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Validate Facebook URL
     if (!url.includes('facebook.com') && !url.includes('fb.watch')) {
       return NextResponse.json(
         { success: false, error: 'Please provide a valid Facebook URL' },
@@ -26,7 +24,6 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching Facebook media for URL:', url);
 
-    // Call your actual backend endpoint (meta for Facebook/Instagram)
     const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
     console.log('Calling API:', apiUrl);
 
@@ -44,7 +41,6 @@ export async function GET(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Backend API returned status ${response.status}:`, errorText);
-      
       return NextResponse.json(
         { 
           success: false, 
@@ -67,10 +63,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Transform the metadownloader response to match frontend expectations
+    // ENHANCED: Log the raw data structure before transformation
+    console.log('Raw data.data structure:', JSON.stringify(data.data, null, 2));
+
     const transformedData = transformMetaDownloaderResponse(data.data);
-    
+
     console.log('Transformed Data:', JSON.stringify(transformedData, null, 2));
+
+    // ADDED: Validate that we have downloadable content
+    if (!transformedData || 
+        (transformedData.video.length === 0 && 
+         transformedData.image.length === 0 && 
+         transformedData.audio.length === 0)) {
+      console.error('No downloadable media found in transformed data');
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Media found but no download URLs available. Please try again or use a different link.',
+          debug: process.env.NODE_ENV === 'development' ? { rawData: data.data } : undefined
+        },
+        { status: 200 }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -131,12 +145,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Redirect to GET handler
     const newRequest = new NextRequest(
       `${request.nextUrl.origin}/api/facebook?url=${encodeURIComponent(url)}`,
       { method: 'GET' }
     );
-    
+
     return GET(newRequest);
 
   } catch (error: any) {
@@ -152,86 +165,120 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Transform metadownloader response format to match frontend expectations
+// ENHANCED transformation function with more robust handling
 function transformMetaDownloaderResponse(data: any) {
-  if (!data) return null;
+  if (!data) {
+    console.error('transformMetaDownloaderResponse: data is null or undefined');
+    return null;
+  }
 
-  // metadownloader returns different structures for FB/IG
-  // Common formats: { url, title, thumbnail, medias: [{url, quality}] }
-  
+  console.log('Transform input keys:', Object.keys(data));
+
   const transformed: any = {
-    title: data.title || data.caption || 'Facebook Video',
-    thumbnail: data.thumbnail || data.thumb || data.image || '',
-    author: data.author || data.username || '',
+    title: data.title || data.caption || data.description || 'Facebook Video',
+    thumbnail: data.thumbnail || data.thumb || data.image || data.picture || '',
+    author: data.author || data.username || data.owner || '',
     duration: data.duration || '',
     video: [],
     audio: [],
     image: [],
-    url: data.url || '',
+    url: data.source || data.url || '',
   };
 
-  // Handle video formats
-  if (data.medias && Array.isArray(data.medias)) {
-    data.medias.forEach((media: any) => {
+  // PRIORITY 1: Check for common metadownloader fields
+  // The package typically returns: { url, title, medias: [{url, quality}] }
+  
+  // Handle medias array (most common format)
+  if (data.medias && Array.isArray(data.medias) && data.medias.length > 0) {
+    console.log('Found medias array with', data.medias.length, 'items');
+    data.medias.forEach((media: any, index: number) => {
+      console.log(`Media ${index}:`, media);
       if (media.url) {
         transformed.video.push({
-          quality: media.quality || media.resolution || 'SD',
+          quality: media.quality || media.resolution || `Quality ${index + 1}`,
           url: media.url,
-          resolution: media.quality || 'Standard',
-          format: media.extension || 'mp4',
-          hasAudio: true,
+          resolution: media.quality || media.resolution || 'Standard',
+          format: media.extension || media.ext || 'mp4',
+          hasAudio: media.hasAudio !== false,
         });
       }
     });
   }
 
-  // Handle direct URL fields
-  if (data.sd && !transformed.video.some((v: any) => v.url === data.sd)) {
-    transformed.video.push({
-      quality: 'SD',
-      url: data.sd,
-      resolution: 'Standard Definition',
-      format: 'mp4',
-      hasAudio: true,
+  // PRIORITY 2: Check for direct video URL fields
+  const videoFields = ['video_url', 'videoUrl', 'video', 'sd', 'hd', 'url'];
+  for (const field of videoFields) {
+    if (data[field] && typeof data[field] === 'string') {
+      console.log(`Found video URL in field: ${field}`, data[field]);
+      if (!transformed.video.some((v: any) => v.url === data[field])) {
+        transformed.video.push({
+          quality: field === 'hd' ? 'HD' : field === 'sd' ? 'SD' : 'Standard',
+          url: data[field],
+          resolution: field === 'hd' ? 'High Definition' : 'Standard Definition',
+          format: 'mp4',
+          hasAudio: true,
+        });
+      }
+    }
+  }
+
+  // PRIORITY 3: Check for links array (alternative format)
+  if (data.links && Array.isArray(data.links)) {
+    console.log('Found links array with', data.links.length, 'items');
+    data.links.forEach((link: any, index: number) => {
+      if (typeof link === 'string') {
+        transformed.video.push({
+          quality: `Quality ${index + 1}`,
+          url: link,
+          resolution: 'Standard',
+          format: 'mp4',
+          hasAudio: true,
+        });
+      } else if (link && link.url) {
+        transformed.video.push({
+          quality: link.quality || link.label || `Quality ${index + 1}`,
+          url: link.url,
+          resolution: link.resolution || 'Standard',
+          format: link.format || 'mp4',
+          hasAudio: link.hasAudio !== false,
+        });
+      }
     });
   }
 
-  if (data.hd && !transformed.video.some((v: any) => v.url === data.hd)) {
-    transformed.video.push({
-      quality: 'HD',
-      url: data.hd,
-      resolution: 'High Definition',
-      format: 'mp4',
-      hasAudio: true,
-    });
+  // PRIORITY 4: Handle images
+  const imageFields = ['images', 'photos', 'pictures'];
+  for (const field of imageFields) {
+    if (data[field] && Array.isArray(data[field])) {
+      console.log(`Found images in field: ${field}`, data[field].length);
+      transformed.image = data[field].map((img: any) => 
+        typeof img === 'string' ? img : img.url || img.src
+      ).filter(Boolean);
+      break;
+    }
   }
 
-  // Handle single URL
-  if (data.url && transformed.video.length === 0) {
-    transformed.video.push({
-      quality: 'Standard',
-      url: data.url,
-      resolution: 'Standard',
-      format: 'mp4',
-      hasAudio: true,
-    });
+  // Single image
+  if (transformed.image.length === 0 && (data.image || data.picture)) {
+    const imgUrl = data.image || data.picture;
+    if (typeof imgUrl === 'string') {
+      transformed.image = [imgUrl];
+    }
   }
 
-  // Handle images (for photo posts)
-  if (data.images && Array.isArray(data.images)) {
-    transformed.image = data.images;
-  } else if (data.image && typeof data.image === 'string') {
-    transformed.image = [data.image];
-  }
-
-  // Handle audio
+  // PRIORITY 5: Handle audio
   if (data.audio) {
+    console.log('Found audio:', data.audio);
     transformed.audio.push({
       quality: 'Original',
-      url: data.audio,
+      url: typeof data.audio === 'string' ? data.audio : data.audio.url,
       format: 'mp3',
     });
   }
+
+  console.log('Transform result - Videos:', transformed.video.length, 
+              'Images:', transformed.image.length, 
+              'Audio:', transformed.audio.length);
 
   return transformed;
 }
