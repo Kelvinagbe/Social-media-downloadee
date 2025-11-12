@@ -71,7 +71,12 @@ async function fetchFromUniversalAPI(url: string): Promise<any> {
     }
 
     const data = await response.json();
-    console.log('API Response:', JSON.stringify(data, null, 2));
+    console.log('=== FULL API RESPONSE ===');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('=== DATA STRUCTURE ===');
+    console.log('data.success:', data.success);
+    console.log('data.data:', data.data);
+    console.log('data.data keys:', data.data ? Object.keys(data.data) : 'N/A');
 
     // Check if we got valid data
     if (data.success && data.data) {
