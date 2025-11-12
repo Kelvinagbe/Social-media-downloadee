@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching Facebook media for URL:', url);
 
-    // Call universalDownloader API with correct endpoint
+    // Call your actual backend endpoint (meta for Facebook/Instagram)
     const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
     console.log('Calling API:', apiUrl);
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
-      signal: AbortSignal.timeout(30000), // 30 second timeout
+      signal: AbortSignal.timeout(30000),
     });
 
     console.log('API Response Status:', response.status);
@@ -55,24 +55,27 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('Backend API Response:', JSON.stringify(data, null, 2));
+    console.log('Backend API Raw Response:', JSON.stringify(data, null, 2));
 
-    // Check if the API returned an error
     if (!data.success) {
       return NextResponse.json(
         { 
           success: false, 
-          error: data.error || data.message || 'Failed to fetch media data' 
+          error: data.error || 'Failed to fetch media data' 
         },
         { status: 200 }
       );
     }
 
-    // Return the data as-is since universalDownloader already formats it correctly
+    // Transform the metadownloader response to match frontend expectations
+    const transformedData = transformMetaDownloaderResponse(data.data);
+    
+    console.log('Transformed Data:', JSON.stringify(transformedData, null, 2));
+
     return NextResponse.json(
       {
         success: true,
-        data: data.data,
+        data: transformedData,
       },
       {
         headers: {
@@ -86,14 +89,14 @@ export async function GET(request: NextRequest) {
 
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       return NextResponse.json(
-        { success: false, error: 'Request timeout. The server took too long to respond. Please try again.' },
+        { success: false, error: 'Request timeout. Please try again.' },
         { status: 200 }
       );
     }
 
     if (error.message.includes('fetch failed') || error.code === 'ECONNREFUSED') {
       return NextResponse.json(
-        { success: false, error: 'Cannot connect to the download service. Please check if the API server is running.' },
+        { success: false, error: 'Cannot connect to the download service. Please check if the API is running.' },
         { status: 200 }
       );
     }
@@ -128,45 +131,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('POST request - Fetching Facebook media for URL:', url);
-
-    // Use the same endpoint as GET
-    const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
-    
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-      signal: AbortSignal.timeout(30000),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('API Error:', errorText);
-      
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch media data. The video might be private or unavailable.' },
-        { status: 200 }
-      );
-    }
-
-    const data = await response.json();
-    console.log('API Response:', JSON.stringify(data, null, 2));
-
-    return NextResponse.json(
-      {
-        success: data.success,
-        data: data.data,
-        error: data.error || data.message
-      },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1200',
-        },
-      }
+    // Redirect to GET handler
+    const newRequest = new NextRequest(
+      `${request.nextUrl.origin}/api/facebook?url=${encodeURIComponent(url)}`,
+      { method: 'GET' }
     );
+    
+    return GET(newRequest);
 
   } catch (error: any) {
     console.error('Facebook API Error:', error);
@@ -179,4 +150,88 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   }
+}
+
+// Transform metadownloader response format to match frontend expectations
+function transformMetaDownloaderResponse(data: any) {
+  if (!data) return null;
+
+  // metadownloader returns different structures for FB/IG
+  // Common formats: { url, title, thumbnail, medias: [{url, quality}] }
+  
+  const transformed: any = {
+    title: data.title || data.caption || 'Facebook Video',
+    thumbnail: data.thumbnail || data.thumb || data.image || '',
+    author: data.author || data.username || '',
+    duration: data.duration || '',
+    video: [],
+    audio: [],
+    image: [],
+    url: data.url || '',
+  };
+
+  // Handle video formats
+  if (data.medias && Array.isArray(data.medias)) {
+    data.medias.forEach((media: any) => {
+      if (media.url) {
+        transformed.video.push({
+          quality: media.quality || media.resolution || 'SD',
+          url: media.url,
+          resolution: media.quality || 'Standard',
+          format: media.extension || 'mp4',
+          hasAudio: true,
+        });
+      }
+    });
+  }
+
+  // Handle direct URL fields
+  if (data.sd && !transformed.video.some((v: any) => v.url === data.sd)) {
+    transformed.video.push({
+      quality: 'SD',
+      url: data.sd,
+      resolution: 'Standard Definition',
+      format: 'mp4',
+      hasAudio: true,
+    });
+  }
+
+  if (data.hd && !transformed.video.some((v: any) => v.url === data.hd)) {
+    transformed.video.push({
+      quality: 'HD',
+      url: data.hd,
+      resolution: 'High Definition',
+      format: 'mp4',
+      hasAudio: true,
+    });
+  }
+
+  // Handle single URL
+  if (data.url && transformed.video.length === 0) {
+    transformed.video.push({
+      quality: 'Standard',
+      url: data.url,
+      resolution: 'Standard',
+      format: 'mp4',
+      hasAudio: true,
+    });
+  }
+
+  // Handle images (for photo posts)
+  if (data.images && Array.isArray(data.images)) {
+    transformed.image = data.images;
+  } else if (data.image && typeof data.image === 'string') {
+    transformed.image = [data.image];
+  }
+
+  // Handle audio
+  if (data.audio) {
+    transformed.audio.push({
+      quality: 'Original',
+      url: data.audio,
+      format: 'mp3',
+    });
+  }
+
+  return transformed;
 }
