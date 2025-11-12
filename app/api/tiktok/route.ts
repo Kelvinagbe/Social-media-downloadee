@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Your universal downloader API base URL
+const UNIVERSAL_API_BASE = 'https://downloader.ovrica.name.ng';
+
 // Function to resolve shortened TikTok URLs
 async function resolveShortUrl(url: string): Promise<string> {
   try {
@@ -44,64 +47,71 @@ function extractVideoId(url: string): string | null {
   }
 }
 
-// Try multiple API endpoints as fallbacks
-async function fetchFromAPI(url: string): Promise<any> {
-  const endpoints = [
-    'https://api.giftedtech.co.ke/api/download/tiktok',
-    'https://api.giftedtech.co.ke/api/download/tiktokdlv2',
-    'https://api.giftedtech.co.ke/api/download/tiktokdlv3',
-  ];
+// Fetch from Universal Downloader API
+async function fetchFromUniversalAPI(url: string): Promise<any> {
+  try {
+    const apiUrl = `${UNIVERSAL_API_BASE}/api/tiktok/download?url=${encodeURIComponent(url)}`;
+    console.log(`Calling Universal Downloader API: ${apiUrl}`);
 
-  let lastError = null;
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      signal: AbortSignal.timeout(30000), // 30 seconds timeout
+    });
 
-  for (const endpoint of endpoints) {
-    try {
-      const apiUrl = `${endpoint}?apikey=gifted&url=${encodeURIComponent(url)}`;
-      console.log(`Trying endpoint: ${endpoint}`);
-
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-        signal: AbortSignal.timeout(30000), // 30 seconds per attempt
-      });
-
-      if (!response.ok) {
-        console.log(`Endpoint ${endpoint} returned status ${response.status}`);
-        continue;
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        console.log(`Endpoint ${endpoint} returned invalid content type`);
-        continue;
-      }
-
-      const data = await response.json();
-      
-      // Check if we got a valid result
-      if (data.result && data.result !== null && data.success !== false) {
-        console.log(`Success with endpoint: ${endpoint}`);
-        return { success: true, data, endpoint };
-      }
-
-      console.log(`Endpoint ${endpoint} returned null result`);
-      lastError = { message: 'Result is null', endpoint };
-
-    } catch (error: any) {
-      console.log(`Endpoint ${endpoint} failed:`, error.message);
-      lastError = { message: error.message, endpoint };
-      continue;
+    if (!response.ok) {
+      console.log(`API returned status ${response.status}`);
+      return {
+        success: false,
+        error: {
+          message: `API returned status ${response.status}`,
+          status: response.status
+        }
+      };
     }
-  }
 
-  // All endpoints failed
-  return { 
-    success: false, 
-    error: lastError || { message: 'All endpoints failed' }
-  };
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      console.log('API returned invalid content type');
+      return {
+        success: false,
+        error: {
+          message: 'Invalid content type returned',
+          contentType
+        }
+      };
+    }
+
+    const data = await response.json();
+
+    // Check if we got a valid result
+    if (data.success && data.data) {
+      console.log('Successfully fetched video data');
+      return { success: true, data };
+    }
+
+    console.log('API returned unsuccessful response:', data);
+    return {
+      success: false,
+      error: {
+        message: data.message || 'Failed to fetch video data',
+        details: data
+      }
+    };
+
+  } catch (error: any) {
+    console.error('Universal API Error:', error);
+    return {
+      success: false,
+      error: {
+        message: error.message,
+        type: error.name
+      }
+    };
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -138,20 +148,20 @@ export async function GET(request: NextRequest) {
     const videoId = extractVideoId(resolvedUrl);
     console.log('Step 3: Video ID:', videoId);
 
-    console.log('Step 4: Trying API endpoints...');
-    const result = await fetchFromAPI(resolvedUrl);
+    console.log('Step 4: Calling Universal Downloader API...');
+    const result = await fetchFromUniversalAPI(resolvedUrl);
 
     if (!result.success) {
       return NextResponse.json(
         { 
           success: false,
           status: 404,
-          message: 'Could not fetch video data from any endpoint. This could mean:\n• The video is private or deleted\n• The video is region-restricted\n• The API cannot access this video\n\nTry:\n1. Make sure the video is public\n2. Copy the URL directly from TikTok app\n3. Try a different video to test if the service is working',
+          message: 'Could not fetch video data. This could mean:\n• The video is private or deleted\n• The video is region-restricted\n• The API cannot access this video\n\nTry:\n1. Make sure the video is public\n2. Copy the URL directly from TikTok app\n3. Try a different video to test if the service is working',
           debug: {
             originalUrl: rawUrl,
             resolvedUrl: resolvedUrl,
             videoId: videoId,
-            lastError: result.error
+            error: result.error
           }
         },
         { status: 200 }
@@ -162,7 +172,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ...result.data,
       _meta: {
-        endpoint_used: result.endpoint
+        api_used: 'Universal Downloader',
+        endpoint: `${UNIVERSAL_API_BASE}/api/tiktok/download`
       }
     }, {
       headers: {
@@ -239,14 +250,14 @@ export async function POST(request: NextRequest) {
     }
 
     const resolvedUrl = await resolveShortUrl(rawUrl);
-    const result = await fetchFromAPI(resolvedUrl);
+    const result = await fetchFromUniversalAPI(resolvedUrl);
 
     if (!result.success) {
       return NextResponse.json(
         { 
           success: false,
           status: 404,
-          message: 'Failed to fetch video data from all endpoints',
+          message: 'Failed to fetch video data',
           debug: result.error
         },
         { status: 200 }
