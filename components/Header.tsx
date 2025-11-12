@@ -26,7 +26,7 @@ export default function Header() {
               <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
                 <Download className="w-4 h-4 text-white" />
               </div>
-              <span className="text-lg font-semibold">MediaGrab</span>
+              <span className="text-lg font-semibold">Media Grab</span>
             </div>
           </div>
           <nav className="hidden md:flex items-center gap-8">
