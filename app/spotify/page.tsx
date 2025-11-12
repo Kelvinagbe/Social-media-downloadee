@@ -48,7 +48,7 @@ export default function SpotifyDownloader() {
     }
   };
 
-  const handleDownload = (downloadUrl, filename) => {
+  const handleDownload = (downloadUrl: string, filename?: string) => {
     const a = document.createElement('a');
     a.href = downloadUrl;
     a.download = filename || 'spotify-audio.mp3';
