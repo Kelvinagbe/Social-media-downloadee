@@ -4,33 +4,9 @@ import React, { useState } from 'react';
 import { Download, Loader2, Check, AlertCircle, Sparkles } from 'lucide-react';
 
 interface VideoInfo {
-  url?: string;
   title?: string;
   thumbnail?: string;
-  duration?: string | number;
-  author?: { name?: string; username?: string; avatar?: string };
-  stats?: { likes?: number; comments?: number; shares?: number; views?: number; plays?: number };
-  downloads?: {
-    video?: Array<{ quality?: string; url?: string; format?: string; hasWatermark?: boolean }>;
-    audio?: Array<{ quality?: string; url?: string }>;
-    images?: string[];
-  };
-  video?: string;
-  videoUrl?: string;
-  download?: string;
-  videoHD?: string;
-  hdVideo?: string;
-  videoNoWatermark?: string;
-  audio?: string;
-  music?: string;
-  audioUrl?: string;
-  images?: string[];
-  cover?: string;
-  description?: string;
-  username?: string;
-  likes?: number;
-  views?: number;
-  shares?: number;
+  downloads?: Array<{ text: string; url: string }>; // Universal Downloader format
   [key: string]: any;
 }
 
@@ -39,7 +15,6 @@ interface ApiResponse {
   status?: number;
   message?: string;
   data?: VideoInfo;
-  result?: VideoInfo;
   error?: string;
 }
 
@@ -50,12 +25,6 @@ export default function TikTokDownloader() {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [error, setError] = useState('');
-
-  const formatNum = (n: number): string => {
-    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
-    return n.toString();
-  };
 
   const handleDownload = async () => {
     const trimmed = url.trim();
@@ -70,89 +39,80 @@ export default function TikTokDownloader() {
       const res = await fetch(`/api/tiktok?url=${encodeURIComponent(trimmed)}`);
       const data: ApiResponse = await res.json();
 
+      console.log('API Response:', data);
+
       if (data.success === false) {
         setError(data.message || 'Failed to fetch video. Please try again.');
         setIsLoading(false);
         return;
       }
 
-      const videoData = data.data || data.result || data;
+      const videoData = data.data;
       if (!videoData) {
         setError('No video data found. The video might be private or deleted.');
         setIsLoading(false);
         return;
       }
 
+      console.log('Video Data:', videoData);
       setVideoInfo(videoData);
       setIsLoading(false);
     } catch (err: any) {
+      console.error('Error:', err);
       setIsLoading(false);
       setError('Network error. Please check your internet connection.');
     }
   };
 
   const getDownloadLinks = (): DownloadLink[] => {
-    if (!videoInfo) return [];
+    if (!videoInfo || !videoInfo.downloads) return [];
     const links: DownloadLink[] = [];
 
-    // Universal Downloader video format
-    videoInfo.downloads?.video?.forEach((item) => {
-      if (!item.url) return;
-      const isNoWatermark = item.hasWatermark === false;
-      const isHD = item.quality?.toLowerCase().includes('hd');
+    // Universal Downloader format: array of {text, url}
+    videoInfo.downloads.forEach((item) => {
+      if (!item.url || !item.text) return;
+
+      const textLower = item.text.toLowerCase();
       
-      links.push({
-        url: item.url,
-        label: isNoWatermark ? 'No Watermark' : isHD ? 'HD Video' : `Video ${item.quality || ''}`,
-        gradient: isNoWatermark ? 'from-cyan-500 to-blue-500' : isHD ? 'from-pink-500 to-rose-500' : 'from-gray-800 to-gray-900',
-        icon: isNoWatermark ? '✨' : '📹',
-        type: 'video'
-      });
-    });
-
-    // Legacy video fields
-    const videoFields = [
-      { field: 'videoNoWatermark', label: 'No Watermark', gradient: 'from-cyan-500 to-blue-500', icon: '✨' },
-      { field: 'videoHD', label: 'HD Video', gradient: 'from-pink-500 to-rose-500', icon: '📹' },
-      { field: 'hdVideo', label: 'HD Video', gradient: 'from-pink-500 to-rose-500', icon: '📹' },
-      { field: 'video', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
-      { field: 'videoUrl', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
-      { field: 'download', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
-    ];
-
-    videoFields.forEach(({ field, label, gradient, icon }) => {
-      const fieldUrl = videoInfo[field];
-      if (fieldUrl && !links.some(l => l.url === fieldUrl)) {
-        links.push({ url: fieldUrl, label, gradient, icon, type: 'video' });
+      // Determine type and styling based on text
+      if (textLower.includes('mp3') || textLower.includes('audio')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-pink-500 to-rose-500',
+          icon: '🎵',
+          type: 'audio'
+        });
+      } else if (textLower.includes('hd')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-purple-500 to-pink-500',
+          icon: '✨',
+          type: 'video'
+        });
+      } else if (textLower.includes('mp4') || textLower.includes('video')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-cyan-500 to-blue-500',
+          icon: '📹',
+          type: 'video'
+        });
+      } else {
+        // Generic download
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-gray-700 to-gray-900',
+          icon: '⬇️',
+          type: 'other'
+        });
       }
     });
 
-    // Audio
-    videoInfo.downloads?.audio?.forEach((item) => {
-      if (item.url) links.push({ url: item.url, label: `Audio ${item.quality || ''}`, gradient: 'from-pink-500 to-rose-500', icon: '🎵', type: 'audio' });
-    });
-
-    const audioUrl = videoInfo.audio || videoInfo.music || videoInfo.audioUrl;
-    if (audioUrl && !links.some(l => l.url === audioUrl)) {
-      links.push({ url: audioUrl, label: 'Audio', gradient: 'from-pink-500 to-rose-500', icon: '🎵', type: 'audio' });
-    }
-
     return links;
   };
-
-  const getImages = () => {
-    const images = videoInfo?.downloads?.images || videoInfo?.images;
-    return Array.isArray(images) ? images : [];
-  };
-
-  const stats = videoInfo?.stats || {};
-  const author = videoInfo?.author || {};
-  const statsData = [
-    { label: 'Likes', value: stats.likes || videoInfo?.likes, icon: '❤️' },
-    { label: 'Views', value: stats.views || stats.plays || videoInfo?.views, icon: '👁️' },
-    { label: 'Shares', value: stats.shares || videoInfo?.shares, icon: '🔗' },
-    { label: 'Comments', value: stats.comments, icon: '💬' },
-  ].filter(s => s.value);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -219,41 +179,25 @@ export default function TikTokDownloader() {
             </div>
 
             {/* Thumbnail & Info */}
-            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl overflow-hidden border border-gray-700">
-              {(videoInfo.thumbnail || videoInfo.cover) && (
-                <img 
-                  src={videoInfo.thumbnail || videoInfo.cover} 
-                  alt="Video" 
-                  className="w-full aspect-[9/16] object-cover"
-                />
-              )}
-              
-              <div className="p-5 space-y-3">
-                {(videoInfo.title || videoInfo.description) && (
-                  <p className="text-sm text-gray-300 line-clamp-2">
-                    {videoInfo.title || videoInfo.description}
-                  </p>
+            {(videoInfo.thumbnail || videoInfo.title) && (
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl overflow-hidden border border-gray-700">
+                {videoInfo.thumbnail && (
+                  <img 
+                    src={videoInfo.thumbnail} 
+                    alt="Video" 
+                    className="w-full aspect-[9/16] object-cover"
+                  />
                 )}
                 
-                {(author.username || videoInfo.username) && (
-                  <div className="text-sm text-gray-400">
-                    @{author.username || videoInfo.username}
-                  </div>
-                )}
-
-                {/* Stats */}
-                {statsData.length > 0 && (
-                  <div className="flex gap-4 pt-3 border-t border-gray-700">
-                    {statsData.map((stat, i) => (
-                      <div key={i} className="text-center">
-                        <div className="text-sm font-bold">{stat.icon} {formatNum(stat.value!)}</div>
-                        <div className="text-xs text-gray-500">{stat.label}</div>
-                      </div>
-                    ))}
+                {videoInfo.title && (
+                  <div className="p-5">
+                    <p className="text-sm text-gray-300 line-clamp-3">
+                      {videoInfo.title}
+                    </p>
                   </div>
                 )}
               </div>
-            </div>
+            )}
 
             {/* Download Links */}
             <div className="space-y-3">
@@ -264,31 +208,19 @@ export default function TikTokDownloader() {
                   download 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className={`block bg-gradient-to-r ${link.gradient} text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all`}
+                  className={`block bg-gradient-to-r ${link.gradient} text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]`}
                 >
-                  {link.icon} {link.label}
+                  <span className="text-xl mr-2">{link.icon}</span>
+                  {link.label}
                 </a>
               ))}
 
-              {/* Images */}
-              {getImages().map((img, i) => (
-                <a 
-                  key={`img-${i}`}
-                  href={img} 
-                  download 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="block bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all"
-                >
-                  🖼️ Image {i + 1}
-                </a>
-              ))}
-
-              {getDownloadLinks().length === 0 && getImages().length === 0 && (
+              {getDownloadLinks().length === 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300">
                   <p className="font-bold mb-2">⚠️ No download links found</p>
+                  <p className="mb-3 text-yellow-200">The API returned data but no downloads are available.</p>
                   <details className="text-xs">
-                    <summary className="cursor-pointer mb-2">Show raw API response</summary>
+                    <summary className="cursor-pointer mb-2 hover:text-yellow-100">Show raw API response</summary>
                     <pre className="bg-black/50 p-3 rounded overflow-auto max-h-64 text-gray-300">
                       {JSON.stringify(videoInfo, null, 2)}
                     </pre>
@@ -301,12 +233,12 @@ export default function TikTokDownloader() {
 
         {/* How it Works */}
         <div className="mt-12 bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-6 border border-gray-700">
-          <h2 className="text-xl font-bold mb-4">How it works</h2>
+          <h2 className="text-xl font-bold mb-4">✨ How it works</h2>
           <div className="space-y-4 text-sm text-gray-400">
             {[
-              'Copy TikTok video URL',
+              'Copy any TikTok video URL',
               'Paste it above and click Download',
-              'Choose quality and save to device'
+              'Choose your preferred quality (HD, MP4, or MP3)'
             ].map((text, i) => (
               <div key={i} className="flex gap-3">
                 <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 to-pink-400 rounded-full flex items-center justify-center text-black text-xs font-bold flex-shrink-0">
@@ -318,11 +250,26 @@ export default function TikTokDownloader() {
           </div>
         </div>
 
+        {/* Features */}
+        <div className="mt-6 grid grid-cols-2 gap-3 text-xs">
+          {[
+            { icon: '⚡', text: 'Fast downloads' },
+            { icon: '🎬', text: 'HD quality' },
+            { icon: '🎵', text: 'Audio extraction' },
+            { icon: '🔒', text: 'No watermark' }
+          ].map((feature, i) => (
+            <div key={i} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800 text-center">
+              <div className="text-lg mb-1">{feature.icon}</div>
+              <div className="text-gray-400">{feature.text}</div>
+            </div>
+          ))}
+        </div>
+
         {/* Footer */}
         <div className="text-center mt-8 text-xs text-gray-600">
-          Powered by Universal Downloader 🚀
+          Powered by Universal Downloader API 🚀
         </div>
       </div>
     </main>
   );
-} 
+}
