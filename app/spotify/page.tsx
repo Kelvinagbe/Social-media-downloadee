@@ -3,6 +3,19 @@
 import React, { useState } from 'react';
 import { Download, Music, Loader2, ExternalLink, Clock, User, AlertCircle } from 'lucide-react';
 
+ //types array✅ 
+
+interface SpotifyData {
+  thumbnail?: string;
+  title: string;
+  author?: string;
+  duration?: string;
+  downloads?: Array<{
+    url: string;
+    text: string;
+  }>;
+}
+
 export default function SpotifyDownloader() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
