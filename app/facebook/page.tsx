@@ -1,7 +1,7 @@
-'use client';
+'use client' 
 
 import React, { useState } from 'react';
-import { Download, Loader2, Check, AlertCircle, Video, Music, Image } from 'lucide-react';
+import { Download, Loader2, Check, AlertCircle, Video, Music, Image, Info } from 'lucide-react';
 
 interface MediaItem {
   quality?: string;
@@ -43,6 +43,7 @@ export default function FacebookDownloader() {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [error, setError] = useState('');
+  const [showRawData, setShowRawData] = useState(false);
 
   const handleDownload = async () => {
     const trimmed = url.trim();
@@ -54,6 +55,7 @@ export default function FacebookDownloader() {
     setIsLoading(true);
     setError('');
     setVideoInfo(null);
+    setShowRawData(false);
 
     try {
       const res = await fetch(`/api/facebook?url=${encodeURIComponent(trimmed)}`);
@@ -94,7 +96,7 @@ export default function FacebookDownloader() {
 
         const quality = item.quality || item.resolution || 'Standard';
         const isHD = quality.toLowerCase().includes('hd') || quality.includes('720') || quality.includes('1080');
-        
+
         links.push({
           url: item.url,
           label: `Video - ${quality}`,
@@ -109,7 +111,7 @@ export default function FacebookDownloader() {
     if (videoInfo.audio && Array.isArray(videoInfo.audio)) {
       videoInfo.audio.forEach((item) => {
         if (!item.url) return;
-        
+
         links.push({
           url: item.url,
           label: `Audio - ${item.quality || 'Standard'}`,
@@ -149,7 +151,7 @@ export default function FacebookDownloader() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 text-white">
       <div className="max-w-2xl mx-auto px-4 py-8">
-        
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
@@ -176,7 +178,7 @@ export default function FacebookDownloader() {
             disabled={isLoading}
             className="w-full bg-slate-900/70 text-white px-5 py-4 rounded-2xl border border-slate-600 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-slate-400 mb-4 transition-all"
           />
-          
+
           <button 
             onClick={handleDownload} 
             disabled={isLoading || !url.trim()}
@@ -207,12 +209,36 @@ export default function FacebookDownloader() {
         {/* Video Info */}
         {videoInfo && (
           <div className="space-y-4 animate-in fade-in duration-500">
-            
+
             {/* Success Badge */}
-            <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-2 w-fit">
-              <Check className="w-5 h-5" />
-              <span className="font-semibold">Media found!</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-2">
+                <Check className="w-5 h-5" />
+                <span className="font-semibold">Media found!</span>
+              </div>
+              
+              {/* Debug Toggle Button */}
+              <button
+                onClick={() => setShowRawData(!showRawData)}
+                className="flex items-center gap-2 text-slate-400 text-xs bg-slate-800/50 border border-slate-600 rounded-xl px-3 py-2 hover:bg-slate-700/50 transition-colors"
+              >
+                <Info className="w-4 h-4" />
+                {showRawData ? 'Hide' : 'Show'} Raw Data
+              </button>
             </div>
+
+            {/* Raw Data Display (for debugging) */}
+            {showRawData && (
+              <div className="bg-slate-900/70 border border-slate-700 rounded-2xl p-4 backdrop-blur-sm">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="w-4 h-4 text-yellow-400" />
+                  <span className="text-sm font-semibold text-yellow-300">Debug: API Response</span>
+                </div>
+                <pre className="text-xs text-slate-300 overflow-auto max-h-96 bg-slate-950/50 p-4 rounded-xl">
+                  {JSON.stringify(videoInfo, null, 2)}
+                </pre>
+              </div>
+            )}
 
             {/* Thumbnail & Info */}
             {(videoInfo.thumbnail || videoInfo.title || videoInfo.author) && (
@@ -223,18 +249,21 @@ export default function FacebookDownloader() {
                       src={videoInfo.thumbnail} 
                       alt="Video thumbnail" 
                       className="w-full aspect-video object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
                   </div>
                 )}
-                
+
                 <div className="p-5 space-y-2">
                   {videoInfo.title && (
                     <h3 className="text-lg font-semibold text-white line-clamp-2">
                       {videoInfo.title}
                     </h3>
                   )}
-                  
+
                   {videoInfo.author && (
                     <p className="text-sm text-blue-300">
                       By {videoInfo.author}
@@ -273,14 +302,31 @@ export default function FacebookDownloader() {
 
               {downloadLinks.length === 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300 backdrop-blur-sm">
-                  <p className="font-bold mb-2">⚠️ No download links found</p>
-                  <p className="mb-3 text-yellow-200">The video might be private or unavailable.</p>
-                  <details className="text-xs">
-                    <summary className="cursor-pointer mb-2 hover:text-yellow-100">Show API response</summary>
-                    <pre className="bg-slate-900/70 p-3 rounded overflow-auto max-h-64 text-slate-300 text-xs">
-                      {JSON.stringify(videoInfo, null, 2)}
-                    </pre>
-                  </details>
+                  <div className="flex items-start gap-3 mb-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold mb-1">No download links found</p>
+                      <p className="text-yellow-200">The API returned data but no downloadable URLs were detected.</p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-slate-900/50 rounded-xl p-3 space-y-2 text-xs">
+                    <p className="text-slate-300 font-semibold">Possible reasons:</p>
+                    <ul className="list-disc list-inside space-y-1 text-slate-400">
+                      <li>The video is private or restricted</li>
+                      <li>The URL format is not supported</li>
+                      <li>The API response structure is different</li>
+                      <li>The content has been deleted</li>
+                    </ul>
+                  </div>
+
+                  <button
+                    onClick={() => setShowRawData(true)}
+                    className="mt-3 text-xs text-yellow-400 hover:text-yellow-300 underline flex items-center gap-1"
+                  >
+                    <Info className="w-3 h-3" />
+                    Click "Show Raw Data" above to see the API response
+                  </button>
                 </div>
               )}
             </div>
@@ -290,7 +336,7 @@ export default function FacebookDownloader() {
         {/* How it Works */}
         <div className="mt-12 bg-slate-800/30 backdrop-blur-sm rounded-3xl p-6 border border-slate-700">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-lg">
               ℹ️
             </div>
             How to use
@@ -298,7 +344,7 @@ export default function FacebookDownloader() {
           <div className="space-y-4 text-sm text-slate-300">
             {[
               'Open Facebook and find the video or photo you want',
-              'Copy the URL from your browser',
+              'Copy the URL from your browser address bar',
               'Paste it here and click Download',
               'Choose your preferred quality and save'
             ].map((text, i) => (
@@ -331,7 +377,7 @@ export default function FacebookDownloader() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-xs text-slate-500">
-          <p>Powered by MetaDownloader 🚀</p>
+          <p>Powered by UniversalDownloader 🚀</p>
           <p className="mt-1">For personal use only • Respect content creators</p>
         </div>
       </div>
