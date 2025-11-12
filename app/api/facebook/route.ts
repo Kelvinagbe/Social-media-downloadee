@@ -63,24 +63,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ENHANCED: Log the raw data structure before transformation
+    // Log the raw data structure
     console.log('Raw data.data structure:', JSON.stringify(data.data, null, 2));
 
-    const transformedData = transformMetaDownloaderResponse(data.data);
+    // Transform to Universal Downloader format (downloads array)
+    const transformedData = transformToUniversalFormat(data.data);
 
     console.log('Transformed Data:', JSON.stringify(transformedData, null, 2));
 
-    // ADDED: Validate that we have downloadable content
-    if (!transformedData || 
-        (transformedData.video.length === 0 && 
-         transformedData.image.length === 0 && 
-         transformedData.audio.length === 0)) {
+    // Validate that we have downloadable content
+    if (!transformedData || !transformedData.downloads || transformedData.downloads.length === 0) {
       console.error('No downloadable media found in transformed data');
       return NextResponse.json(
         { 
           success: false, 
           error: 'Media found but no download URLs available. Please try again or use a different link.',
-          debug: process.env.NODE_ENV === 'development' ? { rawData: data.data } : undefined
+          debug: process.env.NODE_ENV === 'development' ? { 
+            rawData: data.data,
+            transformedData 
+          } : undefined
         },
         { status: 200 }
       );
@@ -89,6 +90,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        status: 200,
+        message: 'Media fetched successfully',
         data: transformedData,
       },
       {
@@ -165,58 +168,63 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ENHANCED transformation function with more robust handling
-function transformMetaDownloaderResponse(data: any) {
+/**
+ * Transform metadownloader response to Universal Downloader format
+ * Output format: { title, thumbnail, downloads: [{ text, url }] }
+ */
+function transformToUniversalFormat(data: any) {
   if (!data) {
-    console.error('transformMetaDownloaderResponse: data is null or undefined');
+    console.error('transformToUniversalFormat: data is null or undefined');
     return null;
   }
 
   console.log('Transform input keys:', Object.keys(data));
 
-  const transformed: any = {
+  const result: any = {
     title: data.title || data.caption || data.description || 'Facebook Video',
     thumbnail: data.thumbnail || data.thumb || data.image || data.picture || '',
     author: data.author || data.username || data.owner || '',
     duration: data.duration || '',
-    video: [],
-    audio: [],
-    image: [],
-    url: data.source || data.url || '',
+    downloads: [], // Universal Downloader format
   };
 
-  // PRIORITY 1: Check for common metadownloader fields
-  // The package typically returns: { url, title, medias: [{url, quality}] }
-  
-  // Handle medias array (most common format)
+  // PRIORITY 1: Check for medias array (most common metadownloader format)
   if (data.medias && Array.isArray(data.medias) && data.medias.length > 0) {
     console.log('Found medias array with', data.medias.length, 'items');
     data.medias.forEach((media: any, index: number) => {
       console.log(`Media ${index}:`, media);
       if (media.url) {
-        transformed.video.push({
-          quality: media.quality || media.resolution || `Quality ${index + 1}`,
+        const quality = media.quality || media.resolution || 'Standard';
+        const isHD = quality.toLowerCase().includes('hd') || 
+                     quality.includes('720') || 
+                     quality.includes('1080');
+        
+        result.downloads.push({
+          text: `Video - ${quality}${isHD ? ' 🎬' : ''}`,
           url: media.url,
-          resolution: media.quality || media.resolution || 'Standard',
-          format: media.extension || media.ext || 'mp4',
-          hasAudio: media.hasAudio !== false,
         });
       }
     });
   }
 
-  // PRIORITY 2: Check for direct video URL fields
-  const videoFields = ['video_url', 'videoUrl', 'video', 'sd', 'hd', 'url'];
-  for (const field of videoFields) {
+  // PRIORITY 2: Check for direct video URL fields (common alternatives)
+  const videoFields = [
+    { field: 'hd', label: 'Video - HD 🎬' },
+    { field: 'sd', label: 'Video - SD' },
+    { field: 'video_url', label: 'Video - Standard' },
+    { field: 'videoUrl', label: 'Video - Standard' },
+    { field: 'video', label: 'Video - Standard' },
+  ];
+
+  for (const { field, label } of videoFields) {
     if (data[field] && typeof data[field] === 'string') {
       console.log(`Found video URL in field: ${field}`, data[field]);
-      if (!transformed.video.some((v: any) => v.url === data[field])) {
-        transformed.video.push({
-          quality: field === 'hd' ? 'HD' : field === 'sd' ? 'SD' : 'Standard',
+      
+      // Avoid duplicates
+      if (!result.downloads.some((d: any) => d.url === data[field])) {
+        result.downloads.push({
+          text: label,
           url: data[field],
-          resolution: field === 'hd' ? 'High Definition' : 'Standard Definition',
-          format: 'mp4',
-          hasAudio: true,
         });
       }
     }
@@ -227,58 +235,72 @@ function transformMetaDownloaderResponse(data: any) {
     console.log('Found links array with', data.links.length, 'items');
     data.links.forEach((link: any, index: number) => {
       if (typeof link === 'string') {
-        transformed.video.push({
-          quality: `Quality ${index + 1}`,
+        result.downloads.push({
+          text: `Video Quality ${index + 1}`,
           url: link,
-          resolution: 'Standard',
-          format: 'mp4',
-          hasAudio: true,
         });
       } else if (link && link.url) {
-        transformed.video.push({
-          quality: link.quality || link.label || `Quality ${index + 1}`,
+        const quality = link.quality || link.label || `Quality ${index + 1}`;
+        result.downloads.push({
+          text: `Video - ${quality}`,
           url: link.url,
-          resolution: link.resolution || 'Standard',
-          format: link.format || 'mp4',
-          hasAudio: link.hasAudio !== false,
         });
       }
     });
   }
 
-  // PRIORITY 4: Handle images
-  const imageFields = ['images', 'photos', 'pictures'];
-  for (const field of imageFields) {
-    if (data[field] && Array.isArray(data[field])) {
-      console.log(`Found images in field: ${field}`, data[field].length);
-      transformed.image = data[field].map((img: any) => 
-        typeof img === 'string' ? img : img.url || img.src
-      ).filter(Boolean);
-      break;
-    }
-  }
-
-  // Single image
-  if (transformed.image.length === 0 && (data.image || data.picture)) {
-    const imgUrl = data.image || data.picture;
-    if (typeof imgUrl === 'string') {
-      transformed.image = [imgUrl];
-    }
-  }
-
-  // PRIORITY 5: Handle audio
-  if (data.audio) {
-    console.log('Found audio:', data.audio);
-    transformed.audio.push({
-      quality: 'Original',
-      url: typeof data.audio === 'string' ? data.audio : data.audio.url,
-      format: 'mp3',
+  // PRIORITY 4: Check for single URL field (last resort)
+  if (result.downloads.length === 0 && data.url && typeof data.url === 'string') {
+    console.log('Using fallback single URL field');
+    result.downloads.push({
+      text: 'Download Video',
+      url: data.url,
     });
   }
 
-  console.log('Transform result - Videos:', transformed.video.length, 
-              'Images:', transformed.image.length, 
-              'Audio:', transformed.audio.length);
+  // PRIORITY 5: Handle images (for photo posts)
+  const imageFields = ['images', 'photos', 'pictures'];
+  for (const field of imageFields) {
+    if (data[field] && Array.isArray(data[field]) && data[field].length > 0) {
+      console.log(`Found images in field: ${field}`, data[field].length);
+      data[field].forEach((img: any, index: number) => {
+        const imgUrl = typeof img === 'string' ? img : img.url || img.src;
+        if (imgUrl) {
+          result.downloads.push({
+            text: `Image ${index + 1} 📸`,
+            url: imgUrl,
+          });
+        }
+      });
+      break; // Only use first found image field
+    }
+  }
 
-  return transformed;
+  // Single image fallback
+  if (result.downloads.length === 0 && (data.image || data.picture)) {
+    const imgUrl = data.image || data.picture;
+    if (typeof imgUrl === 'string') {
+      result.downloads.push({
+        text: 'Download Image 📸',
+        url: imgUrl,
+      });
+    }
+  }
+
+  // PRIORITY 6: Handle audio (if available)
+  if (data.audio) {
+    const audioUrl = typeof data.audio === 'string' ? data.audio : data.audio.url;
+    if (audioUrl) {
+      console.log('Found audio:', audioUrl);
+      result.downloads.push({
+        text: 'Audio Only 🎵',
+        url: audioUrl,
+      });
+    }
+  }
+
+  console.log('Transform result - Total downloads:', result.downloads.length);
+  console.log('Download items:', result.downloads);
+
+  return result;
 }
