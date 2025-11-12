@@ -1,239 +1,275 @@
-import { NextRequest, NextResponse } from 'next/server';
+'use client';
 
-const UNIVERSAL_API_BASE = 'https://downloader.ovrica.name.ng';
+import React, { useState } from 'react';
+import { Download, Loader2, Check, AlertCircle, Sparkles } from 'lucide-react';
 
-async function resolveShortUrl(url: string): Promise<string> {
-  try {
-    if (url.includes('/video/') || url.includes('tiktok.com/@')) {
-      return url;
-    }
-
-    if (url.includes('vm.tiktok.com') || url.includes('vt.tiktok.com')) {
-      console.log('Resolving shortened URL...');
-      const response = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-      const finalUrl = response.url || url;
-      console.log('Resolved to:', finalUrl);
-      return finalUrl;
-    }
-    return url;
-  } catch (error) {
-    console.error('Error resolving short URL:', error);
-    return url;
-  }
+interface VideoInfo {
+  title?: string;
+  thumbnail?: string;
+  downloads?: Array<{ text: string; url: string }>; // Universal Downloader format
+  [key: string]: any;
 }
 
-function extractVideoId(url: string): string | null {
-  try {
-    const videoMatch = url.match(/\/video\/(\d+)/);
-    if (videoMatch) return videoMatch[1];
-    const vMatch = url.match(/\/v\/(\d+)/);
-    if (vMatch) return vMatch[1];
-    return null;
-  } catch (error) {
-    return null;
-  }
+interface ApiResponse {
+  success: boolean;
+  status?: number;
+  message?: string;
+  data?: VideoInfo;
+  error?: string;
 }
 
-async function fetchFromUniversalAPI(url: string): Promise<any> {
-  try {
-    const apiUrl = `${UNIVERSAL_API_BASE}/api/tiktok/download?url=${encodeURIComponent(url)}`;
-    console.log(`Calling Universal Downloader API: ${apiUrl}`);
+type DownloadLink = { url: string; label: string; gradient: string; icon: string; type: string };
 
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-      signal: AbortSignal.timeout(30000),
-    });
+export default function TikTokDownloader() {
+  const [url, setUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
+  const [error, setError] = useState('');
 
-    if (!response.ok) {
-      console.log(`API returned status ${response.status}`);
-      return {
-        success: false,
-        error: { message: `API returned status ${response.status}`, status: response.status }
-      };
-    }
+  const handleDownload = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return setError('Please enter a TikTok URL');
+    if (!trimmed.includes('tiktok.com')) return setError('Please enter a valid TikTok URL');
 
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      return {
-        success: false,
-        error: { message: 'Invalid content type returned', contentType }
-      };
-    }
+    setIsLoading(true);
+    setError('');
+    setVideoInfo(null);
 
-    const data = await response.json();
-    console.log('=== FULL API RESPONSE ===');
-    console.log(JSON.stringify(data, null, 2));
-    console.log('=== DATA STRUCTURE ===');
-    console.log('data.success:', data.success);
-    console.log('data.data:', data.data);
-    console.log('data.data keys:', data.data ? Object.keys(data.data) : 'N/A');
+    try {
+      const res = await fetch(`/api/tiktok?url=${encodeURIComponent(trimmed)}`);
+      const data: ApiResponse = await res.json();
 
-    // Check if we got valid data
-    if (data.success && data.data) {
-      console.log('Successfully fetched video data');
-      return { success: true, data: data.data }; // Extract the nested data
-    }
+      console.log('API Response:', data);
 
-    console.log('API returned unsuccessful response:', data);
-    return {
-      success: false,
-      error: { message: data.message || 'Failed to fetch video data', details: data }
-    };
-
-  } catch (error: any) {
-    console.error('Universal API Error:', error);
-    return {
-      success: false,
-      error: { message: error.message, type: error.name }
-    };
-  }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const rawUrl = searchParams.get('url');
-
-    if (!rawUrl) {
-      return NextResponse.json(
-        { success: false, status: 400, message: 'URL parameter is required' },
-        { status: 400 }
-      );
-    }
-
-    if (!rawUrl.includes('tiktok.com')) {
-      return NextResponse.json(
-        { success: false, status: 400, message: 'Please provide a valid TikTok URL' },
-        { status: 400 }
-      );
-    }
-
-    console.log('Step 1: Original URL:', rawUrl);
-    const resolvedUrl = await resolveShortUrl(rawUrl);
-    console.log('Step 2: Resolved URL:', resolvedUrl);
-
-    const videoId = extractVideoId(resolvedUrl);
-    console.log('Step 3: Video ID:', videoId);
-
-    console.log('Step 4: Calling Universal Downloader API...');
-    const result = await fetchFromUniversalAPI(resolvedUrl);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { 
-          success: false,
-          status: 404,
-          message: 'Could not fetch video data. The video might be private, deleted, or region-restricted.',
-          debug: {
-            originalUrl: rawUrl,
-            resolvedUrl: resolvedUrl,
-            videoId: videoId,
-            error: result.error
-          }
-        },
-        { status: 200 }
-      );
-    }
-
-    console.log('Step 5: Success! Returning video data');
-    
-    // Return the data directly, not nested
-    return NextResponse.json({
-      success: true,
-      data: result.data, // This will be picked up by frontend as data.data
-      _meta: {
-        api_used: 'Universal Downloader',
-        endpoint: `${UNIVERSAL_API_BASE}/api/tiktok/download`
+      if (data.success === false) {
+        setError(data.message || 'Failed to fetch video. Please try again.');
+        setIsLoading(false);
+        return;
       }
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-      },
+
+      const videoData = data.data;
+      if (!videoData) {
+        setError('No video data found. The video might be private or deleted.');
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Video Data:', videoData);
+      setVideoInfo(videoData);
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error('Error:', err);
+      setIsLoading(false);
+      setError('Network error. Please check your internet connection.');
+    }
+  };
+
+  const getDownloadLinks = (): DownloadLink[] => {
+    if (!videoInfo || !videoInfo.downloads) return [];
+    const links: DownloadLink[] = [];
+
+    // Universal Downloader format: array of {text, url}
+    videoInfo.downloads.forEach((item) => {
+      if (!item.url || !item.text) return;
+
+      const textLower = item.text.toLowerCase();
+      
+      // Determine type and styling based on text
+      if (textLower.includes('mp3') || textLower.includes('audio')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-pink-500 to-rose-500',
+          icon: '🎵',
+          type: 'audio'
+        });
+      } else if (textLower.includes('hd')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-purple-500 to-pink-500',
+          icon: '✨',
+          type: 'video'
+        });
+      } else if (textLower.includes('mp4') || textLower.includes('video')) {
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-cyan-500 to-blue-500',
+          icon: '📹',
+          type: 'video'
+        });
+      } else {
+        // Generic download
+        links.push({
+          url: item.url,
+          label: item.text,
+          gradient: 'from-gray-700 to-gray-900',
+          icon: '⬇️',
+          type: 'other'
+        });
+      }
     });
 
-  } catch (error: any) {
-    console.error('TikTok API Error:', error);
+    return links;
+  };
 
-    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
-      return NextResponse.json(
-        { success: false, status: 408, message: 'Request timeout. Please try again.' },
-        { status: 200 }
-      );
-    }
+  return (
+    <main className="min-h-screen bg-black text-white">
+      <div className="max-w-xl mx-auto px-4 py-8">
+        
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 via-pink-400 to-yellow-400 rounded-2xl flex items-center justify-center transform rotate-12">
+              <Sparkles className="w-6 h-6 text-black" />
+            </div>
+            <h1 className="text-3xl font-black">TikTok Downloader</h1>
+          </div>
+          <p className="text-gray-400 text-sm">Download videos without watermark</p>
+        </div>
 
-    if (error.message.includes('fetch failed') || error.code === 'ECONNREFUSED') {
-      return NextResponse.json(
-        { success: false, status: 503, message: 'Cannot connect to the video service.' },
-        { status: 200 }
-      );
-    }
+        {/* Input Card */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-6 mb-6 border border-gray-700">
+          <input 
+            type="text" 
+            value={url} 
+            onChange={(e) => setUrl(e.target.value)} 
+            onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
+            placeholder="Paste TikTok URL here..."
+            disabled={isLoading}
+            className="w-full bg-black/40 text-white px-5 py-4 rounded-2xl border border-gray-700 focus:border-cyan-400 focus:outline-none placeholder-gray-500 mb-4 transition-all"
+          />
+          
+          <button 
+            onClick={handleDownload} 
+            disabled={isLoading || !url.trim()}
+            className="w-full bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-black font-bold py-4 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5" />
+                Download
+              </>
+            )}
+          </button>
+        </div>
 
-    return NextResponse.json(
-      { 
-        success: false,
-        status: 500,
-        message: 'An unexpected error occurred. Please try again.',
-        debug: process.env.NODE_ENV === 'development' ? {
-          error: error.message,
-          stack: error.stack
-        } : undefined
-      },
-      { status: 200 }
-    );
-  }
-}
+        {/* Error */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-300">{error}</div>
+          </div>
+        )}
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const rawUrl = body.url;
+        {/* Video Info */}
+        {videoInfo && (
+          <div className="space-y-4 animate-in fade-in duration-500">
+            
+            {/* Success Badge */}
+            <div className="flex items-center gap-2 text-green-400 text-sm">
+              <Check className="w-5 h-5" />
+              <span className="font-semibold">Video found!</span>
+            </div>
 
-    if (!rawUrl || !rawUrl.includes('tiktok.com')) {
-      return NextResponse.json(
-        { success: false, status: 400, message: 'Valid TikTok URL is required' },
-        { status: 400 }
-      );
-    }
+            {/* Thumbnail & Info */}
+            {(videoInfo.thumbnail || videoInfo.title) && (
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl overflow-hidden border border-gray-700">
+                {videoInfo.thumbnail && (
+                  <img 
+                    src={videoInfo.thumbnail} 
+                    alt="Video" 
+                    className="w-full aspect-[9/16] object-cover"
+                  />
+                )}
+                
+                {videoInfo.title && (
+                  <div className="p-5">
+                    <p className="text-sm text-gray-300 line-clamp-3">
+                      {videoInfo.title}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
-    const resolvedUrl = await resolveShortUrl(rawUrl);
-    const result = await fetchFromUniversalAPI(resolvedUrl);
+            {/* Download Links */}
+            <div className="space-y-3">
+              {getDownloadLinks().map((link, i) => (
+                <a 
+                  key={i}
+                  href={link.url} 
+                  download 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className={`block bg-gradient-to-r ${link.gradient} text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]`}
+                >
+                  <span className="text-xl mr-2">{link.icon}</span>
+                  {link.label}
+                </a>
+              ))}
 
-    if (!result.success) {
-      return NextResponse.json(
-        { success: false, status: 404, message: 'Failed to fetch video data', debug: result.error },
-        { status: 200 }
-      );
-    }
+              {getDownloadLinks().length === 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300">
+                  <p className="font-bold mb-2">⚠️ No download links found</p>
+                  <p className="mb-3 text-yellow-200">The API returned data but no downloads are available.</p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer mb-2 hover:text-yellow-100">Show raw API response</summary>
+                    <pre className="bg-black/50 p-3 rounded overflow-auto max-h-64 text-gray-300">
+                      {JSON.stringify(videoInfo, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-    return NextResponse.json({
-      success: true,
-      data: result.data
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-      },
-    });
+        {/* How it Works */}
+        <div className="mt-12 bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-6 border border-gray-700">
+          <h2 className="text-xl font-bold mb-4">✨ How it works</h2>
+          <div className="space-y-4 text-sm text-gray-400">
+            {[
+              'Copy any TikTok video URL',
+              'Paste it above and click Download',
+              'Choose your preferred quality (HD, MP4, or MP3)'
+            ].map((text, i) => (
+              <div key={i} className="flex gap-3">
+                <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 to-pink-400 rounded-full flex items-center justify-center text-black text-xs font-bold flex-shrink-0">
+                  {i + 1}
+                </div>
+                <div className="pt-0.5">{text}</div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-  } catch (error: any) {
-    console.error('TikTok API Error:', error);
-    return NextResponse.json(
-      { 
-        success: false,
-        status: 500,
-        message: 'Failed to fetch video data',
-        debug: process.env.NODE_ENV === 'development' ? error.message : undefined
-      },
-      { status: 200 }
-    );
-  }
+        {/* Features */}
+        <div className="mt-6 grid grid-cols-2 gap-3 text-xs">
+          {[
+            { icon: '⚡', text: 'Fast downloads' },
+            { icon: '🎬', text: 'HD quality' },
+            { icon: '🎵', text: 'Audio extraction' },
+            { icon: '🔒', text: 'No watermark' }
+          ].map((feature, i) => (
+            <div key={i} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800 text-center">
+              <div className="text-lg mb-1">{feature.icon}</div>
+              <div className="text-gray-400">{feature.text}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-8 text-xs text-gray-600">
+          Powered by Universal Downloader API 🚀
+        </div>
+      </div>
+    </main>
+  );
 }
