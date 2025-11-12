@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Download, Facebook, Music, Youtube, Twitter, Instagram, Video, Music, Image as ImageIcon, X } from 'lucide-react';
+import { Download, Facebook, Youtube, Twitter, Instagram, Video, Music, Image as ImageIcon, X } from 'lucide-react';
 
 const platforms = [
   { id: 'all', name: 'All Platforms', icon: Download, href: '/', color: 'bg-gray-900' },
