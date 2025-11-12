@@ -34,13 +34,7 @@ interface VideoInfo {
     }>;
     images?: string[];
   };
-  // Fallback fields for backward compatibility
-  cover?: string;
-  description?: string;
-  username?: string;
-  likes?: number;
-  views?: number;
-  shares?: number;
+  // Common fields
   video?: string;
   videoUrl?: string;
   download?: string;
@@ -51,6 +45,14 @@ interface VideoInfo {
   music?: string;
   audioUrl?: string;
   images?: string[];
+  // Additional fallback fields
+  cover?: string;
+  description?: string;
+  username?: string;
+  likes?: number;
+  views?: number;
+  shares?: number;
+  [key: string]: any; // Allow any additional fields
 }
 
 interface ApiResponse {
@@ -77,7 +79,6 @@ export default function TikTokDownloader() {
   const handleDownload = async () => {
     const trimmed = url.trim();
 
-    // Validation
     if (!trimmed) {
       setError('Please enter a TikTok URL');
       return;
@@ -93,7 +94,6 @@ export default function TikTokDownloader() {
     setVideoInfo(null);
 
     try {
-      // Call our Next.js API route
       const apiUrl = `/api/tiktok?url=${encodeURIComponent(trimmed)}`;
 
       const res = await fetch(apiUrl, {
@@ -106,25 +106,23 @@ export default function TikTokDownloader() {
       const data: ApiResponse = await res.json();
 
       console.log('API Response:', data);
+      console.log('Full response structure:', JSON.stringify(data, null, 2));
 
       setIsLoading(false);
 
-      // Handle error responses
       if (data.success === false) {
         setError(data.message || 'Failed to fetch video. Please try again.');
         return;
       }
 
-      // Get video info from either data or result field
-      const videoData = data.data || data.result;
+      const videoData = data.data || data.result || data;
 
-      // Check if we have valid result data
       if (!videoData || videoData === null) {
         setError('No video data found. The video might be private, deleted, region-restricted, or the URL might be invalid. Try copying the URL again from TikTok.');
         return;
       }
 
-      // Success - display video info
+      console.log('Video data to display:', videoData);
       setVideoInfo(videoData);
 
     } catch (err: any) {
@@ -139,7 +137,6 @@ export default function TikTokDownloader() {
     }
   };
 
-  // Helper function to get author info
   const getAuthorInfo = () => {
     if (videoInfo?.author) {
       return {
@@ -153,7 +150,6 @@ export default function TikTokDownloader() {
     };
   };
 
-  // Helper function to get stats
   const getStats = () => {
     if (videoInfo?.stats) {
       return {
@@ -168,6 +164,103 @@ export default function TikTokDownloader() {
       views: videoInfo?.views,
       shares: videoInfo?.shares
     };
+  };
+
+  // Helper to find all possible video URLs
+  const getAllVideoUrls = () => {
+    if (!videoInfo) return [];
+    
+    const urls = [];
+    
+    // Universal Downloader format
+    if (videoInfo.downloads?.video && Array.isArray(videoInfo.downloads.video)) {
+      videoInfo.downloads.video.forEach((item, index) => {
+        if (item.url) {
+          const isHD = item.quality?.toLowerCase().includes('hd') || item.quality?.toLowerCase().includes('high');
+          const isNoWatermark = item.hasWatermark === false;
+          
+          let label = 'Download Video';
+          let gradient = 'from-purple-600 to-blue-600';
+          let icon = '📥';
+          
+          if (isNoWatermark) {
+            label = 'Download Video (No Watermark)';
+            gradient = 'from-green-600 to-emerald-600';
+            icon = '🎬';
+          } else if (isHD) {
+            label = 'Download HD Video';
+            gradient = 'from-blue-600 to-cyan-600';
+            icon = '✨';
+          } else if (item.quality) {
+            label = `Download Video (${item.quality})`;
+          }
+          
+          urls.push({ url: item.url, label, gradient, icon, type: 'video' });
+        }
+      });
+    }
+    
+    // Legacy format - check all possible video fields
+    const legacyVideoFields = [
+      { field: 'videoNoWatermark', label: 'Download Video (No Watermark)', gradient: 'from-green-600 to-emerald-600', icon: '🎬' },
+      { field: 'videoHD', label: 'Download HD Video', gradient: 'from-blue-600 to-cyan-600', icon: '✨' },
+      { field: 'hdVideo', label: 'Download HD Video', gradient: 'from-blue-600 to-cyan-600', icon: '✨' },
+      { field: 'video', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
+      { field: 'videoUrl', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
+      { field: 'download', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
+    ];
+
+    legacyVideoFields.forEach(({ field, label, gradient, icon }) => {
+      const url = videoInfo[field];
+      if (url && typeof url === 'string' && !urls.some(u => u.url === url)) {
+        urls.push({ url, label, gradient, icon, type: 'video' });
+      }
+    });
+
+    return urls;
+  };
+
+  // Helper to find all possible audio URLs
+  const getAllAudioUrls = () => {
+    if (!videoInfo) return [];
+    
+    const urls = [];
+    
+    // Universal Downloader format
+    if (videoInfo.downloads?.audio && Array.isArray(videoInfo.downloads.audio)) {
+      videoInfo.downloads.audio.forEach((item, index) => {
+        if (item.url) {
+          urls.push({
+            url: item.url,
+            label: `Download Audio ${item.quality ? `(${item.quality})` : 'Only'}`,
+            gradient: 'from-pink-600 to-rose-600',
+            icon: '🎵',
+            type: 'audio'
+          });
+        }
+      });
+    }
+    
+    // Legacy format
+    const audioUrl = videoInfo.audio || videoInfo.music || videoInfo.audioUrl;
+    if (audioUrl && !urls.some(u => u.url === audioUrl)) {
+      urls.push({
+        url: audioUrl,
+        label: 'Download Audio Only',
+        gradient: 'from-pink-600 to-rose-600',
+        icon: '🎵',
+        type: 'audio'
+      });
+    }
+
+    return urls;
+  };
+
+  // Helper to get images
+  const getImages = () => {
+    if (!videoInfo) return [];
+    const images = videoInfo.downloads?.images || videoInfo.images;
+    return (images && Array.isArray(images)) ? images : [];
   };
 
   return (
@@ -326,141 +419,67 @@ export default function TikTokDownloader() {
               <div className="space-y-3">
                 <h4 className="font-semibold text-black mb-3">Download Options:</h4>
 
-                {/* Universal Downloader format - video downloads */}
-                {videoInfo.downloads?.video && videoInfo.downloads.video.length > 0 && (
-                  <>
-                    {videoInfo.downloads.video.map((item, index) => {
-                      const isHD = item.quality?.toLowerCase().includes('hd') || item.quality?.toLowerCase().includes('high');
-                      const isNoWatermark = item.hasWatermark === false;
-                      
-                      let label = 'Download Video';
-                      let gradient = 'from-purple-600 to-blue-600';
-                      let icon = '📥';
-                      
-                      if (isNoWatermark) {
-                        label = 'Download Video (No Watermark)';
-                        gradient = 'from-green-600 to-emerald-600';
-                        icon = '🎬';
-                      } else if (isHD) {
-                        label = 'Download HD Video';
-                        gradient = 'from-blue-600 to-cyan-600';
-                        icon = '✨';
-                      } else if (item.quality) {
-                        label = `Download Video (${item.quality})`;
-                      }
-                      
-                      return (
-                        <a 
-                          key={index}
-                          href={item.url} 
-                          download 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className={`block w-full bg-gradient-to-r ${gradient} text-white text-center font-semibold py-4 px-6 rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md`}
-                        >
-                          {icon} {label}
-                        </a>
-                      );
-                    })}
-                  </>
-                )}
-
-                {/* Fallback to old format if universal format not available */}
-                {!videoInfo.downloads?.video && (
-                  <>
-                    {(videoInfo.video || videoInfo.videoUrl || videoInfo.download) && (
-                      <a 
-                        href={videoInfo.video || videoInfo.videoUrl || videoInfo.download} 
-                        download 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-purple-700 hover:to-blue-700 active:scale-95 transition-all shadow-md"
-                      >
-                        📥 Download Video (With Watermark)
-                      </a>
-                    )}
-
-                    {(videoInfo.videoHD || videoInfo.hdVideo) && (
-                      <a 
-                        href={videoInfo.videoHD || videoInfo.hdVideo} 
-                        download 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-blue-700 hover:to-cyan-700 active:scale-95 transition-all shadow-md"
-                      >
-                        ✨ Download HD Video
-                      </a>
-                    )}
-
-                    {videoInfo.videoNoWatermark && (
-                      <a 
-                        href={videoInfo.videoNoWatermark} 
-                        download 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-green-700 hover:to-emerald-700 active:scale-95 transition-all shadow-md"
-                      >
-                        🎬 Download Video (No Watermark)
-                      </a>
-                    )}
-                  </>
-                )}
-
-                {/* Universal Downloader format - audio downloads */}
-                {videoInfo.downloads?.audio && videoInfo.downloads.audio.length > 0 && (
-                  <>
-                    {videoInfo.downloads.audio.map((item, index) => (
-                      <a 
-                        key={index}
-                        href={item.url} 
-                        download 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-pink-700 hover:to-rose-700 active:scale-95 transition-all shadow-md"
-                      >
-                        🎵 Download Audio {item.quality ? `(${item.quality})` : 'Only'}
-                      </a>
-                    ))}
-                  </>
-                )}
-
-                {/* Fallback audio format */}
-                {!videoInfo.downloads?.audio && (videoInfo.audio || videoInfo.music || videoInfo.audioUrl) && (
+                {/* Video Downloads */}
+                {getAllVideoUrls().map((item, index) => (
                   <a 
-                    href={videoInfo.audio || videoInfo.music || videoInfo.audioUrl} 
+                    key={`video-${index}`}
+                    href={item.url} 
                     download 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="block w-full bg-gradient-to-r from-pink-600 to-rose-600 text-white text-center font-semibold py-4 px-6 rounded-xl hover:from-pink-700 hover:to-rose-700 active:scale-95 transition-all shadow-md"
+                    className={`block w-full bg-gradient-to-r ${item.gradient} text-white text-center font-semibold py-4 px-6 rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md`}
                   >
-                    🎵 Download Audio Only
+                    {item.icon} {item.label}
                   </a>
+                ))}
+
+                {/* Audio Downloads */}
+                {getAllAudioUrls().map((item, index) => (
+                  <a 
+                    key={`audio-${index}`}
+                    href={item.url} 
+                    download 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className={`block w-full bg-gradient-to-r ${item.gradient} text-white text-center font-semibold py-4 px-6 rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md`}
+                  >
+                    {item.icon} {item.label}
+                  </a>
+                ))}
+
+                {/* Images */}
+                {getImages().length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm font-semibold text-gray-700">Photo Slideshow Images:</p>
+                    {getImages().map((img: string, i: number) => (
+                      <a 
+                        key={`image-${i}`}
+                        href={img} 
+                        download 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="block w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white text-center font-semibold py-3 px-6 rounded-xl hover:from-amber-700 hover:to-orange-700 active:scale-95 transition-all shadow-md"
+                      >
+                        🖼️ Download Image {i + 1}
+                      </a>
+                    ))}
+                  </div>
                 )}
 
-                {/* Images - check both new and old format */}
-                {(() => {
-                  const images = videoInfo.downloads?.images || videoInfo.images;
-                  if (images && Array.isArray(images) && images.length > 0) {
-                    return (
-                      <div className="space-y-2 pt-2">
-                        <p className="text-sm font-semibold text-gray-700">Photo Slideshow Images:</p>
-                        {images.map((img: string, i: number) => (
-                          <a 
-                            key={i}
-                            href={img} 
-                            download 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="block w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white text-center font-semibold py-3 px-6 rounded-xl hover:from-amber-700 hover:to-orange-700 active:scale-95 transition-all shadow-md"
-                          >
-                            🖼️ Download Image {i + 1}
-                          </a>
-                        ))}
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
+                {/* Debug info - show if no downloads found */}
+                {getAllVideoUrls().length === 0 && getAllAudioUrls().length === 0 && getImages().length === 0 && (
+                  <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                    <p className="text-sm text-yellow-800 mb-2">
+                      ⚠️ No download links found in the API response.
+                    </p>
+                    <details className="text-xs text-yellow-700">
+                      <summary className="cursor-pointer font-semibold">Show API Response</summary>
+                      <pre className="mt-2 p-2 bg-yellow-100 rounded overflow-auto max-h-48">
+                        {JSON.stringify(videoInfo, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -483,7 +502,7 @@ export default function TikTokDownloader() {
           ))}
         </div>
 
-        {/* How it Works */}
+       {/* How it Works */}
         <div className="border-2 border-black bg-white rounded-xl p-8 shadow-lg">
           <h2 className="text-2xl font-bold mb-6 text-black">How it works</h2>
           <div className="space-y-5">
