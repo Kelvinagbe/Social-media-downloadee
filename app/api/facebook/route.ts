@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Your backend API base URL
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'downloader.ovrica.name.ng';
+const API_BASE = 'downloader.ovrica.name.ng';
 
 export async function GET(request: NextRequest) {
   try {
