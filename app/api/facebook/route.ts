@@ -1,8 +1,8 @@
 // app/api/facebook/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-// Your backend API base URL
-const API_BASE = 'downloader.ovrica.name.ng';
+// Your universalDownloader API base URL - MUST include https://
+const API_BASE = 'https://downloader.ovrica.name.ng';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,43 +26,49 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching Facebook media for URL:', url);
 
-    // Call your backend API
-    const response = await fetch(
-      `${API_BASE}/api/facebook-insta/download?url=${encodeURIComponent(url)}`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(30000), // 30 second timeout
-      }
-    );
+    // Call universalDownloader API with correct endpoint
+    const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
+    console.log('Calling API:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      signal: AbortSignal.timeout(30000), // 30 second timeout
+    });
+
+    console.log('API Response Status:', response.status);
 
     if (!response.ok) {
-      console.error(`Backend API returned status ${response.status}`);
+      const errorText = await response.text();
+      console.error(`Backend API returned status ${response.status}:`, errorText);
+      
       return NextResponse.json(
         { 
           success: false, 
-          error: `Failed to fetch media (Status: ${response.status})` 
+          error: `Failed to fetch media (Status: ${response.status}). The video might be private or unavailable.` 
         },
         { status: 200 }
       );
     }
 
     const data = await response.json();
-    console.log('Backend API Response:', data);
+    console.log('Backend API Response:', JSON.stringify(data, null, 2));
 
+    // Check if the API returned an error
     if (!data.success) {
       return NextResponse.json(
         { 
           success: false, 
-          error: data.error || 'Failed to fetch media data' 
+          error: data.error || data.message || 'Failed to fetch media data' 
         },
         { status: 200 }
       );
     }
 
-    // Return the data
+    // Return the data as-is since universalDownloader already formats it correctly
     return NextResponse.json(
       {
         success: true,
@@ -80,14 +86,14 @@ export async function GET(request: NextRequest) {
 
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       return NextResponse.json(
-        { success: false, error: 'Request timeout. Please try again.' },
+        { success: false, error: 'Request timeout. The server took too long to respond. Please try again.' },
         { status: 200 }
       );
     }
 
     if (error.message.includes('fetch failed') || error.code === 'ECONNREFUSED') {
       return NextResponse.json(
-        { success: false, error: 'Cannot connect to the media service.' },
+        { success: false, error: 'Cannot connect to the download service. Please check if the API server is running.' },
         { status: 200 }
       );
     }
@@ -122,31 +128,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(
-      `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`,
-      {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(30000),
-      }
-    );
+    console.log('POST request - Fetching Facebook media for URL:', url);
+
+    // Use the same endpoint as GET
+    const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      signal: AbortSignal.timeout(30000),
+    });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error:', errorText);
+      
       return NextResponse.json(
-        { success: false, error: 'Failed to fetch media data' },
+        { success: false, error: 'Failed to fetch media data. The video might be private or unavailable.' },
         { status: 200 }
       );
     }
 
     const data = await response.json();
+    console.log('API Response:', JSON.stringify(data, null, 2));
 
     return NextResponse.json(
       {
         success: data.success,
         data: data.data,
-        error: data.error
+        error: data.error || data.message
       },
       {
         headers: {
