@@ -286,7 +286,13 @@ export default function TikTokDownloader() {
 
               {getDownloadLinks().length === 0 && getImages().length === 0 && (
                 <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300">
-                  ⚠️ No download links found
+                  <p className="font-bold mb-2">⚠️ No download links found</p>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer mb-2">Show raw API response</summary>
+                    <pre className="bg-black/50 p-3 rounded overflow-auto max-h-64 text-gray-300">
+                      {JSON.stringify(videoInfo, null, 2)}
+                    </pre>
+                  </details>
                 </div>
               )}
             </div>
