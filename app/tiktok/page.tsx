@@ -1,40 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, Sparkles, Loader2, Check, AlertCircle, Zap, Shield } from 'lucide-react';
+import { Download, Loader2, Check, AlertCircle, Sparkles } from 'lucide-react';
 
 interface VideoInfo {
-  // Universal Downloader response structure
   url?: string;
   title?: string;
   thumbnail?: string;
   duration?: string | number;
-  author?: {
-    name?: string;
-    username?: string;
-    avatar?: string;
-  };
-  stats?: {
-    likes?: number;
-    comments?: number;
-    shares?: number;
-    views?: number;
-    plays?: number;
-  };
+  author?: { name?: string; username?: string; avatar?: string };
+  stats?: { likes?: number; comments?: number; shares?: number; views?: number; plays?: number };
   downloads?: {
-    video?: Array<{
-      quality?: string;
-      url?: string;
-      format?: string;
-      hasWatermark?: boolean;
-    }>;
-    audio?: Array<{
-      quality?: string;
-      url?: string;
-    }>;
+    video?: Array<{ quality?: string; url?: string; format?: string; hasWatermark?: boolean }>;
+    audio?: Array<{ quality?: string; url?: string }>;
     images?: string[];
   };
-  // Common fields
   video?: string;
   videoUrl?: string;
   download?: string;
@@ -45,14 +25,13 @@ interface VideoInfo {
   music?: string;
   audioUrl?: string;
   images?: string[];
-  // Additional fallback fields
   cover?: string;
   description?: string;
   username?: string;
   likes?: number;
   views?: number;
   shares?: number;
-  [key: string]: any; // Allow any additional fields
+  [key: string]: any;
 }
 
 interface ApiResponse {
@@ -63,6 +42,8 @@ interface ApiResponse {
   result?: VideoInfo;
   error?: string;
 }
+
+type DownloadLink = { url: string; label: string; gradient: string; icon: string; type: string };
 
 export default function TikTokDownloader() {
   const [url, setUrl] = useState('');
@@ -78,457 +59,263 @@ export default function TikTokDownloader() {
 
   const handleDownload = async () => {
     const trimmed = url.trim();
-
-    if (!trimmed) {
-      setError('Please enter a TikTok URL');
-      return;
-    }
-
-    if (!trimmed.includes('tiktok.com')) {
-      setError('Please enter a valid TikTok URL (e.g., https://www.tiktok.com/... or https://vm.tiktok.com/...)');
-      return;
-    }
+    if (!trimmed) return setError('Please enter a TikTok URL');
+    if (!trimmed.includes('tiktok.com')) return setError('Please enter a valid TikTok URL');
 
     setIsLoading(true);
     setError('');
     setVideoInfo(null);
 
     try {
-      const apiUrl = `/api/tiktok?url=${encodeURIComponent(trimmed)}`;
-
-      const res = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
+      const res = await fetch(`/api/tiktok?url=${encodeURIComponent(trimmed)}`);
       const data: ApiResponse = await res.json();
-
-      console.log('API Response:', data);
-      console.log('Full response structure:', JSON.stringify(data, null, 2));
-
-      setIsLoading(false);
 
       if (data.success === false) {
         setError(data.message || 'Failed to fetch video. Please try again.');
+        setIsLoading(false);
         return;
       }
 
       const videoData = data.data || data.result || data;
-
-      if (!videoData || videoData === null) {
-        setError('No video data found. The video might be private, deleted, region-restricted, or the URL might be invalid. Try copying the URL again from TikTok.');
+      if (!videoData) {
+        setError('No video data found. The video might be private or deleted.');
+        setIsLoading(false);
         return;
       }
 
-      console.log('Video data to display:', videoData);
       setVideoInfo(videoData);
-
+      setIsLoading(false);
     } catch (err: any) {
       setIsLoading(false);
-      console.error('Fetch error:', err);
-
-      if (err.message.includes('Failed to fetch')) {
-        setError('Network error. Please check your internet connection and try again.');
-      } else {
-        setError('An unexpected error occurred. Please try again or try a different video URL.');
-      }
+      setError('Network error. Please check your internet connection.');
     }
   };
 
-  const getAuthorInfo = () => {
-    if (videoInfo?.author) {
-      return {
-        name: videoInfo.author.name || videoInfo.author.username,
-        username: videoInfo.author.username
-      };
-    }
-    return {
-      name: videoInfo?.username,
-      username: videoInfo?.username
-    };
-  };
-
-  const getStats = () => {
-    if (videoInfo?.stats) {
-      return {
-        likes: videoInfo.stats.likes,
-        views: videoInfo.stats.views || videoInfo.stats.plays,
-        shares: videoInfo.stats.shares,
-        comments: videoInfo.stats.comments
-      };
-    }
-    return {
-      likes: videoInfo?.likes,
-      views: videoInfo?.views,
-      shares: videoInfo?.shares
-    };
-  };
-
-  // Helper to find all possible video URLs
-  const getAllVideoUrls = () => {
+  const getDownloadLinks = (): DownloadLink[] => {
     if (!videoInfo) return [];
-    
-    const urls = [];
-    
-    // Universal Downloader format
-    if (videoInfo.downloads?.video && Array.isArray(videoInfo.downloads.video)) {
-      videoInfo.downloads.video.forEach((item, index) => {
-        if (item.url) {
-          const isHD = item.quality?.toLowerCase().includes('hd') || item.quality?.toLowerCase().includes('high');
-          const isNoWatermark = item.hasWatermark === false;
-          
-          let label = 'Download Video';
-          let gradient = 'from-purple-600 to-blue-600';
-          let icon = '📥';
-          
-          if (isNoWatermark) {
-            label = 'Download Video (No Watermark)';
-            gradient = 'from-green-600 to-emerald-600';
-            icon = '🎬';
-          } else if (isHD) {
-            label = 'Download HD Video';
-            gradient = 'from-blue-600 to-cyan-600';
-            icon = '✨';
-          } else if (item.quality) {
-            label = `Download Video (${item.quality})`;
-          }
-          
-          urls.push({ url: item.url, label, gradient, icon, type: 'video' });
-        }
+    const links: DownloadLink[] = [];
+
+    // Universal Downloader video format
+    videoInfo.downloads?.video?.forEach((item) => {
+      if (!item.url) return;
+      const isNoWatermark = item.hasWatermark === false;
+      const isHD = item.quality?.toLowerCase().includes('hd');
+      
+      links.push({
+        url: item.url,
+        label: isNoWatermark ? 'No Watermark' : isHD ? 'HD Video' : `Video ${item.quality || ''}`,
+        gradient: isNoWatermark ? 'from-cyan-500 to-blue-500' : isHD ? 'from-pink-500 to-rose-500' : 'from-gray-800 to-gray-900',
+        icon: isNoWatermark ? '✨' : '📹',
+        type: 'video'
       });
-    }
-    
-    // Legacy format - check all possible video fields
-    const legacyVideoFields = [
-      { field: 'videoNoWatermark', label: 'Download Video (No Watermark)', gradient: 'from-green-600 to-emerald-600', icon: '🎬' },
-      { field: 'videoHD', label: 'Download HD Video', gradient: 'from-blue-600 to-cyan-600', icon: '✨' },
-      { field: 'hdVideo', label: 'Download HD Video', gradient: 'from-blue-600 to-cyan-600', icon: '✨' },
-      { field: 'video', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
-      { field: 'videoUrl', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
-      { field: 'download', label: 'Download Video', gradient: 'from-purple-600 to-blue-600', icon: '📥' },
+    });
+
+    // Legacy video fields
+    const videoFields = [
+      { field: 'videoNoWatermark', label: 'No Watermark', gradient: 'from-cyan-500 to-blue-500', icon: '✨' },
+      { field: 'videoHD', label: 'HD Video', gradient: 'from-pink-500 to-rose-500', icon: '📹' },
+      { field: 'hdVideo', label: 'HD Video', gradient: 'from-pink-500 to-rose-500', icon: '📹' },
+      { field: 'video', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
+      { field: 'videoUrl', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
+      { field: 'download', label: 'Video', gradient: 'from-gray-800 to-gray-900', icon: '📹' },
     ];
 
-    legacyVideoFields.forEach(({ field, label, gradient, icon }) => {
-      const url = videoInfo[field];
-      if (url && typeof url === 'string' && !urls.some(u => u.url === url)) {
-        urls.push({ url, label, gradient, icon, type: 'video' });
+    videoFields.forEach(({ field, label, gradient, icon }) => {
+      const fieldUrl = videoInfo[field];
+      if (fieldUrl && !links.some(l => l.url === fieldUrl)) {
+        links.push({ url: fieldUrl, label, gradient, icon, type: 'video' });
       }
     });
 
-    return urls;
-  };
+    // Audio
+    videoInfo.downloads?.audio?.forEach((item) => {
+      if (item.url) links.push({ url: item.url, label: `Audio ${item.quality || ''}`, gradient: 'from-pink-500 to-rose-500', icon: '🎵', type: 'audio' });
+    });
 
-  // Helper to find all possible audio URLs
-  const getAllAudioUrls = () => {
-    if (!videoInfo) return [];
-    
-    const urls = [];
-    
-    // Universal Downloader format
-    if (videoInfo.downloads?.audio && Array.isArray(videoInfo.downloads.audio)) {
-      videoInfo.downloads.audio.forEach((item, index) => {
-        if (item.url) {
-          urls.push({
-            url: item.url,
-            label: `Download Audio ${item.quality ? `(${item.quality})` : 'Only'}`,
-            gradient: 'from-pink-600 to-rose-600',
-            icon: '🎵',
-            type: 'audio'
-          });
-        }
-      });
-    }
-    
-    // Legacy format
     const audioUrl = videoInfo.audio || videoInfo.music || videoInfo.audioUrl;
-    if (audioUrl && !urls.some(u => u.url === audioUrl)) {
-      urls.push({
-        url: audioUrl,
-        label: 'Download Audio Only',
-        gradient: 'from-pink-600 to-rose-600',
-        icon: '🎵',
-        type: 'audio'
-      });
+    if (audioUrl && !links.some(l => l.url === audioUrl)) {
+      links.push({ url: audioUrl, label: 'Audio', gradient: 'from-pink-500 to-rose-500', icon: '🎵', type: 'audio' });
     }
 
-    return urls;
+    return links;
   };
 
-  // Helper to get images
   const getImages = () => {
-    if (!videoInfo) return [];
-    const images = videoInfo.downloads?.images || videoInfo.images;
-    return (images && Array.isArray(images)) ? images : [];
+    const images = videoInfo?.downloads?.images || videoInfo?.images;
+    return Array.isArray(images) ? images : [];
   };
+
+  const stats = videoInfo?.stats || {};
+  const author = videoInfo?.author || {};
+  const statsData = [
+    { label: 'Likes', value: stats.likes || videoInfo?.likes, icon: '❤️' },
+    { label: 'Views', value: stats.views || stats.plays || videoInfo?.views, icon: '👁️' },
+    { label: 'Shares', value: stats.shares || videoInfo?.shares, icon: '🔗' },
+    { label: 'Comments', value: stats.comments, icon: '💬' },
+  ].filter(s => s.value);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 px-6 py-12">
-      <div className="max-w-4xl mx-auto">
-
-        {/* Hero Section */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white border-2 border-black rounded-full mb-6 shadow-sm">
-            <Sparkles className="w-4 h-4 text-black" />
-            <span className="text-sm font-semibold text-black">Fast & Reliable</span>
+    <main className="min-h-screen bg-black text-white">
+      <div className="max-w-xl mx-auto px-4 py-8">
+        
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-400 via-pink-400 to-yellow-400 rounded-2xl flex items-center justify-center transform rotate-12">
+              <Sparkles className="w-6 h-6 text-black" />
+            </div>
+            <h1 className="text-3xl font-black">TikTok Downloader</h1>
           </div>
-          <h1 className="text-5xl lg:text-6xl font-bold mb-4 tracking-tight text-black">
-            TikTok Downloader
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Save videos, audio, and images from TikTok. Fast, free, and easy to use.
-          </p>
+          <p className="text-gray-400 text-sm">Download videos without watermark</p>
         </div>
 
-        {/* Main Download Card */}
-        <div className="bg-white border-2 border-black rounded-2xl p-8 mb-8 shadow-lg">
-          <div className="space-y-6">
-            <div>
-              <label className="block text-sm font-semibold mb-3 text-black">
-                Enter TikTok Video URL
-              </label>
-              <input 
-                type="text" 
-                value={url} 
-                onChange={(e) => setUrl(e.target.value)} 
-                onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
-                placeholder="https://www.tiktok.com/@username/video/... or https://vm.tiktok.com/..."
-                disabled={isLoading}
-                className="w-full px-5 py-4 bg-white border-2 border-gray-300 rounded-xl placeholder-gray-400 focus:outline-none focus:border-black focus:ring-4 focus:ring-black/10 text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
-                💡 Paste any TikTok video URL and press Enter or click the button below
-              </p>
-            </div>
+        {/* Input Card */}
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-6 mb-6 border border-gray-700">
+          <input 
+            type="text" 
+            value={url} 
+            onChange={(e) => setUrl(e.target.value)} 
+            onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
+            placeholder="Paste TikTok URL here..."
+            disabled={isLoading}
+            className="w-full bg-black/40 text-white px-5 py-4 rounded-2xl border border-gray-700 focus:border-cyan-400 focus:outline-none placeholder-gray-500 mb-4 transition-all"
+          />
+          
+          <button 
+            onClick={handleDownload} 
+            disabled={isLoading || !url.trim()}
+            className="w-full bg-gradient-to-r from-cyan-500 to-pink-500 hover:from-cyan-400 hover:to-pink-400 text-black font-bold py-4 rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Download className="w-5 h-5" />
+                Download
+              </>
+            )}
+          </button>
+        </div>
 
-            <button 
-              onClick={handleDownload} 
-              disabled={isLoading || !url.trim()}
-              className="w-full bg-black text-white font-semibold py-4 px-6 rounded-xl hover:bg-gray-800 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-3 text-base shadow-lg"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Processing Video...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="w-5 h-5" />
-                  <span>Get Download Links</span>
-                </>
-              )}
-            </button>
+        {/* Error */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/50 rounded-2xl p-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-red-300">{error}</div>
           </div>
+        )}
 
-          {/* Error Display */}
-          {error && (
-            <div className="mt-6 p-5 bg-red-50 border-2 border-red-200 rounded-xl flex items-start gap-3 animate-in fade-in duration-300">
-              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="text-sm font-bold text-red-900 mb-1">Error</h4>
-                <p className="text-sm text-red-700 mb-2">{error}</p>
-                <p className="text-xs text-red-600">
-                  💡 <strong>Tips:</strong> Make sure the video is public, not age-restricted, and the URL is correct.
-                </p>
-              </div>
+        {/* Video Info */}
+        {videoInfo && (
+          <div className="space-y-4 animate-in fade-in duration-500">
+            
+            {/* Success Badge */}
+            <div className="flex items-center gap-2 text-green-400 text-sm">
+              <Check className="w-5 h-5" />
+              <span className="font-semibold">Video found!</span>
             </div>
-          )}
 
-          {/* Video Info Display */}
-          {videoInfo && (
-            <div className="mt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center gap-2 mb-5 pb-4 border-b-2 border-gray-100">
-                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                  <Check className="w-5 h-5 text-white" />
-                </div>
-                <h3 className="text-xl font-bold text-black">Video Found!</h3>
-              </div>
-
-              {/* Thumbnail */}
+            {/* Thumbnail & Info */}
+            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl overflow-hidden border border-gray-700">
               {(videoInfo.thumbnail || videoInfo.cover) && (
-                <div className="mb-6">
-                  <img 
-                    src={videoInfo.thumbnail || videoInfo.cover} 
-                    alt="Video Thumbnail" 
-                    className="w-full max-w-md mx-auto rounded-xl border-2 border-gray-200 shadow-md" 
-                  />
-                </div>
+                <img 
+                  src={videoInfo.thumbnail || videoInfo.cover} 
+                  alt="Video" 
+                  className="w-full aspect-[9/16] object-cover"
+                />
               )}
-
-              {/* Video Details */}
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-5 mb-6 space-y-3 text-sm border border-gray-200">
+              
+              <div className="p-5 space-y-3">
                 {(videoInfo.title || videoInfo.description) && (
-                  <div className="flex gap-2">
-                    <span className="font-semibold text-gray-700 min-w-[90px]">Description:</span>
-                    <span className="text-gray-900">{videoInfo.title || videoInfo.description}</span>
-                  </div>
-                )}
-                {getAuthorInfo().username && (
-                  <div className="flex gap-2">
-                    <span className="font-semibold text-gray-700 min-w-[90px]">Author:</span>
-                    <span className="text-gray-900">@{getAuthorInfo().username}</span>
-                  </div>
-                )}
-                {videoInfo.duration && (
-                  <div className="flex gap-2">
-                    <span className="font-semibold text-gray-700 min-w-[90px]">Duration:</span>
-                    <span className="text-gray-900">{videoInfo.duration} seconds</span>
-                  </div>
+                  <p className="text-sm text-gray-300 line-clamp-2">
+                    {videoInfo.title || videoInfo.description}
+                  </p>
                 )}
                 
-                {/* Stats Grid */}
-                {(() => {
-                  const stats = getStats();
-                  const hasStats = stats.likes || stats.views || stats.shares || stats.comments;
-                  
-                  if (!hasStats) return null;
-                  
-                  return (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-gray-300">
-                      {stats.likes && (
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-black">❤️ {formatNum(stats.likes)}</div>
-                          <div className="text-xs text-gray-600">Likes</div>
-                        </div>
-                      )}
-                      {stats.views && (
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-black">👁️ {formatNum(stats.views)}</div>
-                          <div className="text-xs text-gray-600">Views</div>
-                        </div>
-                      )}
-                      {stats.shares && (
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-black">🔄 {formatNum(stats.shares)}</div>
-                          <div className="text-xs text-gray-600">Shares</div>
-                        </div>
-                      )}
-                      {stats.comments && (
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-black">💬 {formatNum(stats.comments)}</div>
-                          <div className="text-xs text-gray-600">Comments</div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
+                {(author.username || videoInfo.username) && (
+                  <div className="text-sm text-gray-400">
+                    @{author.username || videoInfo.username}
+                  </div>
+                )}
 
-              {/* Download Links */}
-              <div className="space-y-3">
-                <h4 className="font-semibold text-black mb-3">Download Options:</h4>
-
-                {/* Video Downloads */}
-                {getAllVideoUrls().map((item, index) => (
-                  <a 
-                    key={`video-${index}`}
-                    href={item.url} 
-                    download 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className={`block w-full bg-gradient-to-r ${item.gradient} text-white text-center font-semibold py-4 px-6 rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md`}
-                  >
-                    {item.icon} {item.label}
-                  </a>
-                ))}
-
-                {/* Audio Downloads */}
-                {getAllAudioUrls().map((item, index) => (
-                  <a 
-                    key={`audio-${index}`}
-                    href={item.url} 
-                    download 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className={`block w-full bg-gradient-to-r ${item.gradient} text-white text-center font-semibold py-4 px-6 rounded-xl hover:opacity-90 active:scale-95 transition-all shadow-md`}
-                  >
-                    {item.icon} {item.label}
-                  </a>
-                ))}
-
-                {/* Images */}
-                {getImages().length > 0 && (
-                  <div className="space-y-2 pt-2">
-                    <p className="text-sm font-semibold text-gray-700">Photo Slideshow Images:</p>
-                    {getImages().map((img: string, i: number) => (
-                      <a 
-                        key={`image-${i}`}
-                        href={img} 
-                        download 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full bg-gradient-to-r from-amber-600 to-orange-600 text-white text-center font-semibold py-3 px-6 rounded-xl hover:from-amber-700 hover:to-orange-700 active:scale-95 transition-all shadow-md"
-                      >
-                        🖼️ Download Image {i + 1}
-                      </a>
+                {/* Stats */}
+                {statsData.length > 0 && (
+                  <div className="flex gap-4 pt-3 border-t border-gray-700">
+                    {statsData.map((stat, i) => (
+                      <div key={i} className="text-center">
+                        <div className="text-sm font-bold">{stat.icon} {formatNum(stat.value!)}</div>
+                        <div className="text-xs text-gray-500">{stat.label}</div>
+                      </div>
                     ))}
                   </div>
                 )}
-
-                {/* Debug info - show if no downloads found */}
-                {getAllVideoUrls().length === 0 && getAllAudioUrls().length === 0 && getImages().length === 0 && (
-                  <div className="p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-                    <p className="text-sm text-yellow-800 mb-2">
-                      ⚠️ No download links found in the API response.
-                    </p>
-                    <details className="text-xs text-yellow-700">
-                      <summary className="cursor-pointer font-semibold">Show API Response</summary>
-                      <pre className="mt-2 p-2 bg-yellow-100 rounded overflow-auto max-h-48">
-                        {JSON.stringify(videoInfo, null, 2)}
-                      </pre>
-                    </details>
-                  </div>
-                )}
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {[
-            { icon: Zap, title: 'Lightning Fast', desc: 'Download videos in seconds with our optimized servers.', color: 'bg-yellow-500' },
-            { icon: Shield, title: 'Safe & Secure', desc: "Your privacy matters. We don't store any data.", color: 'bg-blue-500' },
-            { icon: Sparkles, title: 'HD Quality', desc: 'Get the best available quality, including HD options.', color: 'bg-purple-500' }
-          ].map(({ icon: Icon, title, desc, color }) => (
-            <div key={title} className="border-2 border-black bg-white rounded-xl p-6 hover:shadow-xl transition-shadow">
-              <div className={`w-12 h-12 ${color} rounded-xl flex items-center justify-center mb-4 shadow-md`}>
-                <Icon className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-base font-bold text-black mb-2">{title}</h3>
-              <p className="text-sm text-gray-600 leading-relaxed">{desc}</p>
+            {/* Download Links */}
+            <div className="space-y-3">
+              {getDownloadLinks().map((link, i) => (
+                <a 
+                  key={i}
+                  href={link.url} 
+                  download 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className={`block bg-gradient-to-r ${link.gradient} text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all`}
+                >
+                  {link.icon} {link.label}
+                </a>
+              ))}
+
+              {/* Images */}
+              {getImages().map((img, i) => (
+                <a 
+                  key={`img-${i}`}
+                  href={img} 
+                  download 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="block bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-center font-bold py-4 px-6 rounded-2xl hover:opacity-90 transition-all"
+                >
+                  🖼️ Image {i + 1}
+                </a>
+              ))}
+
+              {getDownloadLinks().length === 0 && getImages().length === 0 && (
+                <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300">
+                  ⚠️ No download links found
+                </div>
+              )}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
-       {/* How it Works */}
-        <div className="border-2 border-black bg-white rounded-xl p-8 shadow-lg">
-          <h2 className="text-2xl font-bold mb-6 text-black">How it works</h2>
-          <div className="space-y-5">
+        {/* How it Works */}
+        <div className="mt-12 bg-gradient-to-br from-gray-900 to-gray-800 rounded-3xl p-6 border border-gray-700">
+          <h2 className="text-xl font-bold mb-4">How it works</h2>
+          <div className="space-y-4 text-sm text-gray-400">
             {[
-              { title: 'Copy the URL', desc: 'Open TikTok, find the video you want, and copy its URL from your browser or the share menu.' },
-              { title: 'Paste URL here', desc: 'Paste the URL in the input field above and click "Get Download Links" or press Enter.' },
-              { title: 'Save to device', desc: 'Choose your preferred quality and format, then download instantly to your device.' }
-            ].map(({ title, desc }, i) => (
-              <div key={i} className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-black text-white rounded-full flex items-center justify-center text-base font-bold shadow-md">
+              'Copy TikTok video URL',
+              'Paste it above and click Download',
+              'Choose quality and save to device'
+            ].map((text, i) => (
+              <div key={i} className="flex gap-3">
+                <div className="w-6 h-6 bg-gradient-to-br from-cyan-400 to-pink-400 rounded-full flex items-center justify-center text-black text-xs font-bold flex-shrink-0">
                   {i + 1}
                 </div>
-                <div className="flex-1 pt-1">
-                  <h4 className="text-base font-semibold mb-1 text-black">{title}</h4>
-                  <p className="text-sm text-gray-600 leading-relaxed">{desc}</p>
-                </div>
+                <div className="pt-0.5">{text}</div>
               </div>
             ))}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-12 text-sm text-gray-500">
-          <p>Powered by Universal Downloader 🚀</p>
+        <div className="text-center mt-8 text-xs text-gray-600">
+          Powered by Universal Downloader 🚀
         </div>
-
       </div>
     </main>
   );
