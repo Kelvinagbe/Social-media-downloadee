@@ -1,7 +1,6 @@
 // app/api/spotify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-// Your universalDownloader API base URL
 const API_BASE = 'https://downloader.ovrica.name.ng';
 
 export async function GET(request: NextRequest) {
@@ -16,18 +15,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Validate Spotify URL
-    if (!isValidSpotifyUrl(url)) {
+    // Validate and clean Spotify URL
+    const cleanedUrl = cleanSpotifyUrl(url);
+    if (!isValidSpotifyUrl(cleanedUrl)) {
       return NextResponse.json(
-        { success: false, error: 'Please provide a valid Spotify URL (track, album, playlist, or artist)' },
+        { 
+          success: false, 
+          error: 'Please provide a valid Spotify URL (track, album, playlist, or artist)' 
+        },
         { status: 400 }
       );
     }
 
-    console.log('Fetching Spotify content for URL:', url);
+    console.log('Fetching Spotify content for URL:', cleanedUrl);
 
-    // Call your backend endpoint
-    const apiUrl = `${API_BASE}/api/spotify?url=${encodeURIComponent(url)}`;
+    const apiUrl = `${API_BASE}/api/spotify?url=${encodeURIComponent(cleanedUrl)}`;
     console.log('Calling API:', apiUrl);
 
     const response = await fetch(apiUrl, {
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('Backend API Raw Response:', JSON.stringify(data, null, 2));
+    console.log('Backend API Response:', JSON.stringify(data, null, 2));
 
     if (!data.success) {
       return NextResponse.json(
@@ -67,17 +69,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Log the raw data structure
-    console.log('Raw data.data structure:', JSON.stringify(data.data, null, 2));
-
-    // Transform to Universal Downloader format
-    const transformedData = transformSpotifyToUniversalFormat(data.data);
-
+    const transformedData = transformSpotifyData(data.data);
     console.log('Transformed Data:', JSON.stringify(transformedData, null, 2));
 
-    // Validate that we have downloadable content
     if (!transformedData || !transformedData.downloads || transformedData.downloads.length === 0) {
-      console.error('No downloadable media found in transformed data');
+      console.error('No downloadable media found');
       return NextResponse.json(
         { 
           success: false, 
@@ -145,7 +141,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!isValidSpotifyUrl(url)) {
+    const cleanedUrl = cleanSpotifyUrl(url);
+    if (!isValidSpotifyUrl(cleanedUrl)) {
       return NextResponse.json(
         { success: false, error: 'Please provide a valid Spotify URL' },
         { status: 400 }
@@ -153,7 +150,7 @@ export async function POST(request: NextRequest) {
     }
 
     const newRequest = new NextRequest(
-      `${request.nextUrl.origin}/api/spotify?url=${encodeURIComponent(url)}`,
+      `${request.nextUrl.origin}/api/spotify?url=${encodeURIComponent(cleanedUrl)}`,
       { method: 'GET' }
     );
 
@@ -173,40 +170,55 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * Clean Spotify URL by removing query parameters and fragments
+ */
+function cleanSpotifyUrl(url: string): string {
+  try {
+    // Remove query parameters and fragments
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    return cleanUrl.trim();
+  } catch {
+    return url.trim();
+  }
+}
+
+/**
  * Validate Spotify URL
  */
 function isValidSpotifyUrl(url: string): boolean {
-  const regex = /^https?:\/\/open\.spotify\.com\/(track|album|playlist|artist)\/[a-zA-Z0-9]+/;
-  return regex.test(url);
+  try {
+    const urlPattern = /^https?:\/\/open\.spotify\.com\/(track|album|playlist|artist)\/[a-zA-Z0-9]+$/;
+    return urlPattern.test(url);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Transform Spotify API response to Universal Downloader format
- * Input: { title, author, thumbnail, duration, downloadLinks: [{ url, quality, extension, type }] }
- * Output: { title, thumbnail, duration, author, downloads: [{ text, url }] }
  */
-function transformSpotifyToUniversalFormat(data: any) {
+function transformSpotifyData(data: any) {
   if (!data) {
-    console.error('transformSpotifyToUniversalFormat: data is null or undefined');
+    console.error('Transform: data is null or undefined');
     return null;
   }
 
-  console.log('Transform input keys:', Object.keys(data));
+  console.log('Transform input:', Object.keys(data));
 
   const result: any = {
-    title: data.title || 'Spotify Track',
-    thumbnail: data.thumbnail || data.cover || '',
+    title: data.title || data.name || 'Spotify Track',
+    thumbnail: data.thumbnail || data.cover || data.image || '',
     duration: data.duration || '',
-    author: data.author || data.artist || '',
+    author: data.author || data.artist || data.artists || '',
     downloads: [],
   };
 
-  // Handle downloadLinks array from backend
-  if (data.downloadLinks && Array.isArray(data.downloadLinks) && data.downloadLinks.length > 0) {
-    console.log('Found downloadLinks array with', data.downloadLinks.length, 'items');
+  // Process downloadLinks array
+  if (Array.isArray(data.downloadLinks) && data.downloadLinks.length > 0) {
+    console.log('Processing downloadLinks:', data.downloadLinks.length);
 
-    data.downloadLinks.forEach((link: any) => {
-      console.log('Processing download link:', link);
+    data.downloadLinks.forEach((link: any, index: number) => {
+      console.log(`Link ${index}:`, link);
 
       if (!link.url) {
         console.warn('Skipping link without URL:', link);
@@ -217,25 +229,18 @@ function transformSpotifyToUniversalFormat(data: any) {
       const extension = link.extension || 'mp3';
       const type = link.type || 'audio';
 
-      // Format the download text
-      let downloadText = '';
-      
-      if (type === 'audio') {
-        downloadText = formatAudioQuality(quality, extension);
-      } else {
-        downloadText = `${quality} - ${extension.toUpperCase()}`;
-      }
+      const displayText = formatDownloadText(quality, extension, type);
 
       result.downloads.push({
-        text: downloadText,
+        text: displayText,
         url: link.url,
       });
     });
   }
 
-  // Handle medias array (alternative field name)
-  if (data.medias && Array.isArray(data.medias) && data.medias.length > 0) {
-    console.log('Found medias array with', data.medias.length, 'items');
+  // Process medias array (alternative format)
+  if (Array.isArray(data.medias) && data.medias.length > 0) {
+    console.log('Processing medias:', data.medias.length);
 
     data.medias.forEach((media: any) => {
       if (!media.url) {
@@ -245,9 +250,9 @@ function transformSpotifyToUniversalFormat(data: any) {
 
       const quality = media.quality || 'standard';
       const extension = media.extension || 'mp3';
-      
+
       result.downloads.push({
-        text: formatAudioQuality(quality, extension),
+        text: formatDownloadText(quality, extension, 'audio'),
         url: media.url,
       });
     });
@@ -255,10 +260,11 @@ function transformSpotifyToUniversalFormat(data: any) {
 
   // Fallback: check for direct URL fields
   if (result.downloads.length === 0) {
-    console.log('No downloadLinks found, checking for direct URL fields');
+    console.log('No structured downloads found, checking direct URL fields');
 
-    const directFields = ['url', 'download_url', 'audio_url', 'downloadUrl'];
-    for (const field of directFields) {
+    const directUrlFields = ['url', 'download_url', 'audio_url', 'downloadUrl', 'link'];
+    
+    for (const field of directUrlFields) {
       if (data[field] && typeof data[field] === 'string') {
         console.log(`Found direct URL in field: ${field}`);
         result.downloads.push({
@@ -270,41 +276,41 @@ function transformSpotifyToUniversalFormat(data: any) {
     }
   }
 
-  console.log('Transform result - Total downloads:', result.downloads.length);
-  console.log('Download items:', result.downloads);
+  console.log(`Transform complete: ${result.downloads.length} downloads found`);
 
   return result;
 }
 
 /**
- * Format audio quality label for display
+ * Format download text for display
  */
-function formatAudioQuality(quality: string, extension: string): string {
+function formatDownloadText(quality: string, extension: string, type: string): string {
   const ext = extension.toUpperCase();
   const q = String(quality).toLowerCase();
 
-  // Map quality levels
-  const qualityMap: { [key: string]: string } = {
-    '320': 'High Quality (320kbps)',
-    '256': 'High Quality (256kbps)',
-    '192': 'Good Quality (192kbps)',
-    '160': 'Standard Quality (160kbps)',
-    '128': 'Standard Quality (128kbps)',
-    '96': 'Low Quality (96kbps)',
-    'high': 'High Quality',
-    'medium': 'Medium Quality',
-    'low': 'Low Quality',
-    'standard': 'Standard Quality',
-    'unknown': 'Audio',
-  };
+  if (type === 'audio') {
+    // Quality map with bitrate info
+    const qualityMap: Record<string, string> = {
+      '320': 'High Quality (320kbps)',
+      '256': 'High Quality (256kbps)',
+      '192': 'Good Quality (192kbps)',
+      '160': 'Standard Quality (160kbps)',
+      '128': 'Standard Quality (128kbps)',
+      '96': 'Low Quality (96kbps)',
+      'high': 'High Quality',
+      'medium': 'Medium Quality',
+      'low': 'Low Quality',
+      'standard': 'Standard Quality',
+    };
 
-  // Find matching quality
-  for (const [key, label] of Object.entries(qualityMap)) {
-    if (q.includes(key)) {
-      return `${label} 🎵 - ${ext}`;
+    for (const [key, label] of Object.entries(qualityMap)) {
+      if (q.includes(key)) {
+        return `${label} - ${ext} 🎵`;
+      }
     }
+
+    return `Audio - ${ext} 🎵`;
   }
 
-  // Default format
-  return `Audio ${quality !== 'unknown' ? `(${quality})` : ''} 🎵 - ${ext}`;
+  return `${quality} - ${ext}`;
 }
