@@ -1,42 +1,25 @@
 'use client' 
 
 import React, { useState } from 'react';
-import { Download, Loader2, Check, AlertCircle, Video, Music, Image, Info } from 'lucide-react';
-
-interface MediaItem {
-  quality?: string;
-  url?: string;
-  resolution?: string;
-  format?: string;
-  hasAudio?: boolean;
-  text?: string;
-}
+import { Download, Loader2, Check, AlertCircle, Info, ExternalLink } from 'lucide-react';
 
 interface VideoInfo {
   title?: string;
   thumbnail?: string;
   author?: string;
   duration?: string;
-  video?: MediaItem[];
-  audio?: MediaItem[];
-  image?: string[];
-  url?: string;
+  downloads?: Array<{ text: string; url: string }>;
   [key: string]: any;
 }
 
 interface ApiResponse {
   success: boolean;
+  status?: number;
+  message?: string;
   data?: VideoInfo;
   error?: string;
+  debug?: any;
 }
-
-type DownloadLink = { 
-  url: string; 
-  label: string; 
-  gradient: string; 
-  icon: React.ReactNode;
-  quality?: string;
-};
 
 export default function FacebookDownloader() {
   const [url, setUrl] = useState('');
@@ -85,68 +68,7 @@ export default function FacebookDownloader() {
     }
   };
 
-  const getDownloadLinks = (): DownloadLink[] => {
-    if (!videoInfo) return [];
-    const links: DownloadLink[] = [];
-
-    // Handle video downloads
-    if (videoInfo.video && Array.isArray(videoInfo.video)) {
-      videoInfo.video.forEach((item) => {
-        if (!item.url) return;
-
-        const quality = item.quality || item.resolution || 'Standard';
-        const isHD = quality.toLowerCase().includes('hd') || quality.includes('720') || quality.includes('1080');
-
-        links.push({
-          url: item.url,
-          label: `Video - ${quality}`,
-          quality: quality,
-          gradient: isHD ? 'from-blue-600 to-blue-800' : 'from-blue-500 to-blue-700',
-          icon: <Video className="w-5 h-5" />
-        });
-      });
-    }
-
-    // Handle audio downloads
-    if (videoInfo.audio && Array.isArray(videoInfo.audio)) {
-      videoInfo.audio.forEach((item) => {
-        if (!item.url) return;
-
-        links.push({
-          url: item.url,
-          label: `Audio - ${item.quality || 'Standard'}`,
-          gradient: 'from-pink-500 to-rose-600',
-          icon: <Music className="w-5 h-5" />
-        });
-      });
-    }
-
-    // Handle image downloads (for photo posts)
-    if (videoInfo.image && Array.isArray(videoInfo.image)) {
-      videoInfo.image.forEach((imgUrl, index) => {
-        links.push({
-          url: imgUrl,
-          label: `Image ${index + 1}`,
-          gradient: 'from-purple-500 to-indigo-600',
-          icon: <Image className="w-5 h-5" />
-        });
-      });
-    }
-
-    // Fallback: check for direct URL field
-    if (links.length === 0 && videoInfo.url) {
-      links.push({
-        url: videoInfo.url,
-        label: 'Download Video',
-        gradient: 'from-blue-500 to-blue-700',
-        icon: <Video className="w-5 h-5" />
-      });
-    }
-
-    return links;
-  };
-
-  const downloadLinks = getDownloadLinks();
+  const downloadLinks = videoInfo?.downloads || [];
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 text-white">
@@ -216,7 +138,7 @@ export default function FacebookDownloader() {
                 <Check className="w-5 h-5" />
                 <span className="font-semibold">Media found!</span>
               </div>
-              
+
               {/* Debug Toggle Button */}
               <button
                 onClick={() => setShowRawData(!showRawData)}
@@ -281,26 +203,39 @@ export default function FacebookDownloader() {
 
             {/* Download Links */}
             <div className="space-y-3">
-              {downloadLinks.map((link, i) => (
-                <a 
-                  key={i}
-                  href={link.url} 
-                  download 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className={`group block bg-gradient-to-r ${link.gradient} text-white font-bold py-4 px-6 rounded-2xl hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {link.icon}
-                      <span>{link.label}</span>
-                    </div>
-                    <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-                  </div>
-                </a>
-              ))}
+              {downloadLinks.length > 0 ? (
+                downloadLinks.map((link, i) => {
+                  const isHD = link.text.toLowerCase().includes('hd') || link.text.includes('🎬');
+                  const isImage = link.text.toLowerCase().includes('image') || link.text.includes('📸');
+                  const isAudio = link.text.toLowerCase().includes('audio') || link.text.includes('🎵');
+                  
+                  let gradient = 'from-blue-500 to-blue-700';
+                  if (isHD) gradient = 'from-blue-600 to-blue-800';
+                  if (isImage) gradient = 'from-purple-500 to-indigo-600';
+                  if (isAudio) gradient = 'from-pink-500 to-rose-600';
 
-              {downloadLinks.length === 0 && (
+                  return (
+                    <a 
+                      key={i}
+                      href={link.url} 
+                      download 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className={`group block bg-gradient-to-r ${gradient} text-white font-bold py-4 px-6 rounded-2xl hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          {link.text}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <ExternalLink className="w-4 h-4 opacity-70" />
+                          <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+                        </div>
+                      </div>
+                    </a>
+                  );
+                })
+              ) : (
                 <div className="bg-yellow-500/10 border border-yellow-500/50 rounded-2xl p-4 text-sm text-yellow-300 backdrop-blur-sm">
                   <div className="flex items-start gap-3 mb-3">
                     <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
@@ -309,14 +244,14 @@ export default function FacebookDownloader() {
                       <p className="text-yellow-200">The API returned data but no downloadable URLs were detected.</p>
                     </div>
                   </div>
-                  
+
                   <div className="bg-slate-900/50 rounded-xl p-3 space-y-2 text-xs">
                     <p className="text-slate-300 font-semibold">Possible reasons:</p>
                     <ul className="list-disc list-inside space-y-1 text-slate-400">
                       <li>The video is private or restricted</li>
                       <li>The URL format is not supported</li>
-                      <li>The API response structure is different</li>
-                      <li>The content has been deleted</li>
+                      <li>The API response structure is different than expected</li>
+                      <li>The content has been deleted or removed</li>
                     </ul>
                   </div>
 
