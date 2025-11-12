@@ -3,14 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Download, Facebook, Music, Youtube, Twitter, Instagram, Video, Spotify, Image as ImageIcon, X } from 'lucide-react';
+import { Download, Facebook, Music, Youtube, Twitter, Instagram, Video, Music, Image as ImageIcon, X } from 'lucide-react';
 
 const platforms = [
   { id: 'all', name: 'All Platforms', icon: Download, href: '/', color: 'bg-gray-900' },
   { id: 'facebook', name: 'Facebook', icon: Facebook, href: '/facebook', color: 'bg-blue-600' },
   { id: 'tiktok', name: 'TikTok', icon: Music, href: '/tiktok', color: 'bg-black' },
   { id: 'youtube', name: 'YouTube', icon: Youtube, href: '/youtube', color: 'bg-red-600' },
-  { id: 'spotify', name: 'Spotify', icon: Spotify, href: '/spotify', color: 'bg-green-600' },
+  { id: 'spotify', name: 'Spotify', icon: Music, href: '/spotify', color: 'bg-green-600' },
   { id: 'twitter', name: 'X (Twitter)', icon: Twitter, href: '/twitter', color: 'bg-black' },
   { id: 'instagram', name: 'Instagram', icon: Instagram, href: '/instagram', color: 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500' },
 ];
