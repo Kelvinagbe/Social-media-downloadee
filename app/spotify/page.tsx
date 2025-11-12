@@ -1,9 +1,7 @@
-'use client' 
+'use client'
 
 import React, { useState } from 'react';
 import { Download, Music, Loader2, ExternalLink, Clock, User, AlertCircle } from 'lucide-react';
-
- //types array✅ 
 
 interface SpotifyData {
   thumbnail?: string;
@@ -20,7 +18,7 @@ export default function SpotifyDownloader() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<SpotifyData | null>(null);
 
   const handleSubmit = async () => {
     if (!url.trim()) {
