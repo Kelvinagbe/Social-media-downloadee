@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     }
 
     const response = await fetch(
-      `${API_BASE}/api/facebook-insta/download?url=${encodeURIComponent(url)}`,
+      `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`,
       {
         method: 'GET',
         headers: {
