@@ -1,5 +1,4 @@
 'use client' 
-
 import React, { useState } from 'react';
 import { Download, Loader2, Check, AlertCircle, Info, ExternalLink } from 'lucide-react';
 
@@ -47,6 +46,10 @@ export default function FacebookDownloader() {
       console.log('API Response:', data);
 
       if (!data.success) {
+        // Show debug info if available
+        if (data.debug) {
+          console.log('Debug Info:', data.debug);
+        }
         setError(data.error || 'Failed to fetch media. Please try again.');
         setIsLoading(false);
         return;
@@ -59,7 +62,13 @@ export default function FacebookDownloader() {
       }
 
       console.log('Media Data:', data.data);
-      setVideoInfo(data.data);
+      console.log('Download Links Found:', data.data.downloads?.length || 0);
+      
+      // Store the full API response for debugging
+      setVideoInfo({
+        ...data.data,
+        _rawApiResponse: data.debug?.rawData || null
+      });
       setIsLoading(false);
     } catch (err: any) {
       console.error('Error:', err);
@@ -156,6 +165,18 @@ export default function FacebookDownloader() {
                   <AlertCircle className="w-4 h-4 text-yellow-400" />
                   <span className="text-sm font-semibold text-yellow-300">Debug: API Response</span>
                 </div>
+                
+                {/* Show raw API data if available */}
+                {videoInfo._rawApiResponse && (
+                  <div className="mb-4">
+                    <p className="text-xs text-slate-400 mb-2 font-semibold">Raw API Data (from backend):</p>
+                    <pre className="text-xs text-slate-300 overflow-auto max-h-64 bg-slate-950/50 p-4 rounded-xl">
+                      {JSON.stringify(videoInfo._rawApiResponse, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                
+                <p className="text-xs text-slate-400 mb-2 font-semibold">Transformed Data:</p>
                 <pre className="text-xs text-slate-300 overflow-auto max-h-96 bg-slate-950/50 p-4 rounded-xl">
                   {JSON.stringify(videoInfo, null, 2)}
                 </pre>
