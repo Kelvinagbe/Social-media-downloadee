@@ -18,7 +18,7 @@ export default function Header() {
           <div className="flex items-center gap-3">
             <button 
               onClick={toggleSidebar}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
+              className="lg:hidden p-2 hover:bg-white-100 rounded-lg"
             >
               <Menu className="w-5 h-5" />
             </button>
