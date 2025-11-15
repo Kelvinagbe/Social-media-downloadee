@@ -53,6 +53,21 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
     console.log('📦 Raw API Response:', JSON.stringify(data, null, 2));
 
+    // Check if the external API returned an error in its response
+    if (data.data && data.data.status === false) {
+      console.error('❌ External API Error:', data.data.msg);
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `API Error: ${data.data.msg || 'The external API encountered an error processing this URL. Try a different URL or try again later.'}`,
+          debug: process.env.NODE_ENV === 'development' ? { 
+            apiResponse: data 
+          } : undefined
+        },
+        { status: 200 }
+      );
+    }
+
     if (!data.success) {
       return NextResponse.json(
         { 
