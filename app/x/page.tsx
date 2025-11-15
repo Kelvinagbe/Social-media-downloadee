@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import { Download, AlertCircle, Loader2, CheckCircle, Video, Image } from 'lucide-react';
 
 export default function TwitterDownloader() {
-  const [url, setUrl] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [mediaData, setMediaData] = useState(null);
+  const [url, setUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [mediaData, setMediaData] = useState<Array<{quality: string, type: string, url: string}> | null>(null);
 
-  const handleDownload = async (e) => {
+  const handleDownload = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     
     if (!url.trim()) {
@@ -43,7 +43,7 @@ export default function TwitterDownloader() {
     }
   };
 
-  const handleDirectDownload = (downloadUrl, quality) => {
+  const handleDirectDownload = (downloadUrl: string, quality: string) => {
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = `twitter-media-${quality}-${Date.now()}`;
@@ -53,7 +53,7 @@ export default function TwitterDownloader() {
     document.body.removeChild(link);
   };
 
-  const getMediaIcon = (type) => {
+  const getMediaIcon = (type: string) => {
     if (type.toLowerCase().includes('video') || type.toLowerCase().includes('mp4')) {
       return <Video className="w-5 h-5" />;
     }
@@ -66,8 +66,10 @@ export default function TwitterDownloader() {
         {/* Header */}
         <div className="text-center mb-12">
           <div className="flex items-center justify-center mb-4">
-            <div className="bg-black p-6 rounded-2xl shadow-lg">
-              <div className="text-white text-5xl font-bold">𝕏</div>
+            <div className="bg-black p-6 rounded-2xl shadow-lg w-24 h-24 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" className="w-14 h-14 fill-white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
             </div>
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-3">
@@ -93,7 +95,7 @@ export default function TwitterDownloader() {
                 placeholder="https://twitter.com/username/status/123456789..."
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all outline-none"
                 disabled={loading}
-                onKeyDown={(e) => e.key === 'Enter' && handleDownload(e)}
+                onKeyDown={(e) => e.key === 'Enter' && handleDownload(e as any)}
               />
             </div>
 
