@@ -1,5 +1,3 @@
-'use client' 
-
 import React, { useState } from 'react';
 import { Download, Loader2, Check, AlertCircle, Info, ExternalLink } from 'lucide-react';
 
@@ -30,9 +28,9 @@ export default function FacebookDownloader() {
 
   const handleDownload = async () => {
     const trimmed = url.trim();
-    if (!trimmed) return setError('Please enter a Facebook URL');
-    if (!trimmed.includes('facebook.com') && !trimmed.includes('fb.watch')) {
-      return setError('Please enter a valid Facebook URL');
+    if (!trimmed) return setError('Please enter a Facebook or Instagram URL');
+    if (!trimmed.includes('facebook.com') && !trimmed.includes('fb.watch') && !trimmed.includes('instagram.com')) {
+      return setError('Please enter a valid Facebook or Instagram URL');
     }
 
     setIsLoading(true);
@@ -47,18 +45,18 @@ export default function FacebookDownloader() {
       console.log('API Response:', data);
 
       if (!data.success) {
-        setError(data.error || 'Failed to fetch video. Please try again.');
+        setError(data.error || 'Failed to fetch media. Please try again.');
         setIsLoading(false);
         return;
       }
 
       if (!data.data) {
-        setError('No video data found. The video might be private or deleted.');
+        setError('No media data found. The content might be private or deleted.');
         setIsLoading(false);
         return;
       }
 
-      console.log('Video Data:', data.data);
+      console.log('Media Data:', data.data);
       setVideoInfo(data.data);
       setIsLoading(false);
     } catch (err: any) {
@@ -96,7 +94,7 @@ export default function FacebookDownloader() {
             value={url} 
             onChange={(e) => setUrl(e.target.value)} 
             onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleDownload()}
-            placeholder="Paste Facebook video or photo URL..."
+            placeholder="Paste Facebook or Instagram URL..."
             disabled={isLoading}
             className="w-full bg-slate-900/70 text-white px-5 py-4 rounded-2xl border border-slate-600 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-slate-400 mb-4 transition-all"
           />
@@ -208,7 +206,7 @@ export default function FacebookDownloader() {
                   const isHD = link.text.toLowerCase().includes('hd') || link.text.includes('🎬');
                   const isImage = link.text.toLowerCase().includes('image') || link.text.includes('📸');
                   const isAudio = link.text.toLowerCase().includes('audio') || link.text.includes('🎵');
-                  
+
                   let gradient = 'from-blue-500 to-blue-700';
                   if (isHD) gradient = 'from-blue-600 to-blue-800';
                   if (isImage) gradient = 'from-purple-500 to-indigo-600';
@@ -278,7 +276,7 @@ export default function FacebookDownloader() {
           </h2>
           <div className="space-y-4 text-sm text-slate-300">
             {[
-              'Open Facebook and find the video or photo you want',
+              'Open Facebook or Instagram and find the content you want',
               'Copy the URL from your browser address bar',
               'Paste it here and click Download',
               'Choose your preferred quality and save'
