@@ -15,17 +15,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!url.includes('facebook.com') && !url.includes('fb.watch')) {
+    if (!url.includes('facebook.com') && !url.includes('fb.watch') && !url.includes('instagram.com')) {
       return NextResponse.json(
-        { success: false, error: 'Please provide a valid Facebook URL' },
+        { success: false, error: 'Please provide a valid Facebook or Instagram URL' },
         { status: 400 }
       );
     }
 
-    console.log('Fetching Facebook media for URL:', url);
+    console.log('📥 Fetching media for URL:', url);
 
     const apiUrl = `${API_BASE}/api/meta/download?url=${encodeURIComponent(url)}`;
-    console.log('Calling API:', apiUrl);
+    console.log('🔗 Calling API:', apiUrl);
 
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -36,11 +36,11 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(30000),
     });
 
-    console.log('API Response Status:', response.status);
+    console.log('📊 API Response Status:', response.status);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Backend API returned status ${response.status}:`, errorText);
+      console.error(`❌ Backend API error ${response.status}:`, errorText);
       return NextResponse.json(
         { 
           success: false, 
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    console.log('Backend API Raw Response:', JSON.stringify(data, null, 2));
+    console.log('📦 Raw API Response:', JSON.stringify(data, null, 2));
 
     if (!data.success) {
       return NextResponse.json(
@@ -63,21 +63,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Log the raw data structure
-    console.log('Raw data.data structure:', JSON.stringify(data.data, null, 2));
+    // Transform metadownloader response
+    const transformedData = transformMetadownloaderResponse(data.data);
 
-    // Transform to Universal Downloader format (downloads array)
-    const transformedData = transformToUniversalFormat(data.data);
-
-    console.log('Transformed Data:', JSON.stringify(transformedData, null, 2));
-
-    // Validate that we have downloadable content
     if (!transformedData || !transformedData.downloads || transformedData.downloads.length === 0) {
-      console.error('No downloadable media found in transformed data');
+      console.error('❌ No downloadable media found');
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Media found but no download URLs available. Please try again or use a different link.',
+          error: 'Media found but no download URLs available. The video might be private or region-restricted.',
           debug: process.env.NODE_ENV === 'development' ? { 
             rawData: data.data,
             transformedData 
@@ -86,6 +80,8 @@ export async function GET(request: NextRequest) {
         { status: 200 }
       );
     }
+
+    console.log('✅ Success! Found', transformedData.downloads.length, 'download options');
 
     return NextResponse.json(
       {
@@ -102,7 +98,7 @@ export async function GET(request: NextRequest) {
     );
 
   } catch (error: any) {
-    console.error('Facebook API Error:', error);
+    console.error('❌ Facebook API Error:', error);
 
     if (error.name === 'TimeoutError' || error.name === 'AbortError') {
       return NextResponse.json(
@@ -141,13 +137,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!url.includes('facebook.com') && !url.includes('fb.watch')) {
-      return NextResponse.json(
-        { success: false, error: 'Please provide a valid Facebook URL' },
-        { status: 400 }
-      );
-    }
-
+    // Create GET request internally
     const newRequest = new NextRequest(
       `${request.nextUrl.origin}/api/facebook?url=${encodeURIComponent(url)}`,
       { method: 'GET' }
@@ -156,11 +146,11 @@ export async function POST(request: NextRequest) {
     return GET(newRequest);
 
   } catch (error: any) {
-    console.error('Facebook API Error:', error);
+    console.error('❌ POST Error:', error);
     return NextResponse.json(
       { 
         success: false,
-        error: 'Failed to fetch media data',
+        error: 'Failed to process request',
         debug: process.env.NODE_ENV === 'development' ? error.message : undefined
       },
       { status: 200 }
@@ -169,117 +159,155 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Transform metadownloader response to Universal Downloader format
- * Output format: { title, thumbnail, downloads: [{ text, url }] }
+ * Transform metadownloader package response to Universal Downloader format
+ * 
+ * Expected input format (from metadownloader npm package):
+ * {
+ *   title: string,
+ *   thumbnail: string,
+ *   medias: [{ url: string, quality: string, extension: string, size: string }]
+ * }
+ * 
+ * Output format: 
+ * { 
+ *   title: string, 
+ *   thumbnail: string, 
+ *   downloads: [{ text: string, url: string }] 
+ * }
  */
-function transformToUniversalFormat(data: any) {
-  if (!data) {
-    console.error('transformToUniversalFormat: data is null or undefined');
+function transformMetadownloaderResponse(data: any) {
+  if (!data || typeof data !== 'object') {
+    console.error('❌ Invalid data: null, undefined, or not an object');
     return null;
   }
 
-  console.log('Transform input keys:', Object.keys(data));
+  console.log('🔄 Starting transformation...');
+  console.log('📋 Available keys:', Object.keys(data));
 
   const result: any = {
-    title: data.title || data.caption || data.description || 'Facebook Video',
+    title: data.title || data.caption || data.description || 'Social Media Video',
     thumbnail: data.thumbnail || data.thumb || data.image || data.picture || '',
     author: data.author || data.username || data.owner || '',
     duration: data.duration || '',
-    downloads: [], // Universal Downloader format
+    downloads: [],
   };
 
-  // PRIORITY 1: Check for medias array (most common metadownloader format)
+  // ============================================
+  // PRIORITY 1: Handle medias array (Standard metadownloader format)
+  // ============================================
   if (data.medias && Array.isArray(data.medias) && data.medias.length > 0) {
-    console.log('Found medias array with', data.medias.length, 'items');
+    console.log('✅ Found medias array:', data.medias.length, 'items');
+    
     data.medias.forEach((media: any, index: number) => {
-      console.log(`Media ${index}:`, media);
-      if (media.url) {
+      console.log(`  📹 Media ${index + 1}:`, {
+        url: media.url ? media.url.substring(0, 50) + '...' : 'NO URL',
+        quality: media.quality,
+        extension: media.extension,
+        size: media.size
+      });
+
+      if (media.url && typeof media.url === 'string' && media.url.startsWith('http')) {
         const quality = media.quality || media.resolution || 'Standard';
-        const isHD = quality.toLowerCase().includes('hd') || 
-                     quality.includes('720') || 
-                     quality.includes('1080');
+        const size = media.size ? ` (${media.size})` : '';
+        const extension = media.extension ? ` .${media.extension}` : '';
         
+        const isHD = quality.toLowerCase().includes('hd') || 
+                     quality.toLowerCase().includes('high') ||
+                     quality.includes('720') || 
+                     quality.includes('1080') ||
+                     quality.includes('2160');
+
         result.downloads.push({
-          text: `Video - ${quality}${isHD ? ' 🎬' : ''}`,
+          text: `${quality}${extension}${size}${isHD ? ' 🎬' : ''}`,
           url: media.url,
         });
+      } else {
+        console.warn(`  ⚠️ Media ${index + 1} has invalid or missing URL`);
       }
     });
+  } else {
+    console.warn('⚠️ No medias array found or it\'s empty');
   }
 
-  // PRIORITY 2: Check for direct video URL fields (common alternatives)
-  const videoFields = [
-    { field: 'hd', label: 'Video - HD 🎬' },
-    { field: 'sd', label: 'Video - SD' },
-    { field: 'video_url', label: 'Video - Standard' },
-    { field: 'videoUrl', label: 'Video - Standard' },
-    { field: 'video', label: 'Video - Standard' },
+  // ============================================
+  // PRIORITY 2: Handle direct URL fields (Fallback)
+  // ============================================
+  const urlFields = [
+    { key: 'url', label: 'Download' },
+    { key: 'video_url', label: 'Video' },
+    { key: 'videoUrl', label: 'Video' },
+    { key: 'download_url', label: 'Download' },
+    { key: 'downloadUrl', label: 'Download' },
+    { key: 'hd', label: 'HD Quality 🎬' },
+    { key: 'sd', label: 'SD Quality' },
+    { key: 'hdUrl', label: 'HD Quality 🎬' },
+    { key: 'sdUrl', label: 'SD Quality' },
   ];
 
-  for (const { field, label } of videoFields) {
-    if (data[field] && typeof data[field] === 'string') {
-      console.log(`Found video URL in field: ${field}`, data[field]);
-      
-      // Avoid duplicates
-      if (!result.downloads.some((d: any) => d.url === data[field])) {
-        result.downloads.push({
-          text: label,
-          url: data[field],
-        });
+  urlFields.forEach(({ key, label }) => {
+    if (data[key] && typeof data[key] === 'string' && data[key].startsWith('http')) {
+      const isDuplicate = result.downloads.some((d: any) => d.url === data[key]);
+      if (!isDuplicate) {
+        console.log(`✅ Found URL in field: ${key}`);
+        result.downloads.push({ text: label, url: data[key] });
       }
+    }
+  });
+
+  // ============================================
+  // PRIORITY 3: Handle links/urls array (Alternative format)
+  // ============================================
+  const linkArrayFields = ['links', 'urls', 'videos', 'qualities'];
+  
+  for (const field of linkArrayFields) {
+    if (data[field] && Array.isArray(data[field]) && data[field].length > 0) {
+      console.log(`✅ Found ${field} array:`, data[field].length, 'items');
+      
+      data[field].forEach((item: any, index: number) => {
+        const url = typeof item === 'string' ? item : item.url || item.link;
+        const quality = typeof item === 'object' ? item.quality || item.label : null;
+        
+        if (url && url.startsWith('http')) {
+          const isDuplicate = result.downloads.some((d: any) => d.url === url);
+          if (!isDuplicate) {
+            result.downloads.push({
+              text: quality || `Quality ${index + 1}`,
+              url: url,
+            });
+          }
+        }
+      });
+      break; // Only use first found array field
     }
   }
 
-  // PRIORITY 3: Check for links array (alternative format)
-  if (data.links && Array.isArray(data.links)) {
-    console.log('Found links array with', data.links.length, 'items');
-    data.links.forEach((link: any, index: number) => {
-      if (typeof link === 'string') {
-        result.downloads.push({
-          text: `Video Quality ${index + 1}`,
-          url: link,
-        });
-      } else if (link && link.url) {
-        const quality = link.quality || link.label || `Quality ${index + 1}`;
-        result.downloads.push({
-          text: `Video - ${quality}`,
-          url: link.url,
-        });
-      }
-    });
-  }
-
-  // PRIORITY 4: Check for single URL field (last resort)
-  if (result.downloads.length === 0 && data.url && typeof data.url === 'string') {
-    console.log('Using fallback single URL field');
-    result.downloads.push({
-      text: 'Download Video',
-      url: data.url,
-    });
-  }
-
-  // PRIORITY 5: Handle images (for photo posts)
+  // ============================================
+  // PRIORITY 4: Handle images (For photo posts)
+  // ============================================
   const imageFields = ['images', 'photos', 'pictures'];
+  
   for (const field of imageFields) {
     if (data[field] && Array.isArray(data[field]) && data[field].length > 0) {
-      console.log(`Found images in field: ${field}`, data[field].length);
+      console.log(`✅ Found ${field} array:`, data[field].length, 'images');
+      
       data[field].forEach((img: any, index: number) => {
         const imgUrl = typeof img === 'string' ? img : img.url || img.src;
-        if (imgUrl) {
+        if (imgUrl && imgUrl.startsWith('http')) {
           result.downloads.push({
             text: `Image ${index + 1} 📸`,
             url: imgUrl,
           });
         }
       });
-      break; // Only use first found image field
+      break;
     }
   }
 
   // Single image fallback
   if (result.downloads.length === 0 && (data.image || data.picture)) {
     const imgUrl = data.image || data.picture;
-    if (typeof imgUrl === 'string') {
+    if (typeof imgUrl === 'string' && imgUrl.startsWith('http')) {
+      console.log('✅ Found single image field');
       result.downloads.push({
         text: 'Download Image 📸',
         url: imgUrl,
@@ -287,11 +315,13 @@ function transformToUniversalFormat(data: any) {
     }
   }
 
-  // PRIORITY 6: Handle audio (if available)
+  // ============================================
+  // PRIORITY 5: Handle audio (If available)
+  // ============================================
   if (data.audio) {
     const audioUrl = typeof data.audio === 'string' ? data.audio : data.audio.url;
-    if (audioUrl) {
-      console.log('Found audio:', audioUrl);
+    if (audioUrl && audioUrl.startsWith('http')) {
+      console.log('✅ Found audio');
       result.downloads.push({
         text: 'Audio Only 🎵',
         url: audioUrl,
@@ -299,8 +329,21 @@ function transformToUniversalFormat(data: any) {
     }
   }
 
-  console.log('Transform result - Total downloads:', result.downloads.length);
-  console.log('Download items:', result.downloads);
+  // ============================================
+  // Final validation and logging
+  // ============================================
+  console.log('📊 Transformation Complete:');
+  console.log(`  ✅ Downloads found: ${result.downloads.length}`);
+  
+  if (result.downloads.length > 0) {
+    console.log('  📥 Download options:');
+    result.downloads.forEach((d: any, i: number) => {
+      console.log(`    ${i + 1}. ${d.text}`);
+    });
+  } else {
+    console.error('  ❌ NO DOWNLOADS FOUND!');
+    console.error('  📦 Raw data structure:', JSON.stringify(data, null, 2));
+  }
 
-  return result;
+  return result.downloads.length > 0 ? result : null;
 }
