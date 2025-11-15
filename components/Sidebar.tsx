@@ -11,8 +11,7 @@ const platforms = [
   { id: 'tiktok', name: 'TikTok', icon: Music, href: '/tiktok', color: 'bg-black' },
   { id: 'youtube', name: 'YouTube', icon: Youtube, href: '/youtube', color: 'bg-red-600' },
   { id: 'spotify', name: 'Spotify', icon: Music, href: '/spotify', color: 'bg-green-600' },
-  { id: 'twitter', name: 'X (Twitter)', icon: Twitter, href: '/twitter', color: 'bg-black' },
-  { id: 'instagram', name: 'Instagram', icon: Instagram, href: '/instagram', color: 'bg-gradient-to-br from-purple-600 via-pink-600 to-orange-500' },
+  
 ];
 
 export default function Sidebar() {
